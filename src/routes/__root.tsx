@@ -83,6 +83,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: "Sistema centralizado de administración de relojes biométricos ZKTeco para múltiples sucursales." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "TimeCore — Control Biométrico" },
+      { name: "twitter:description", content: "Sistema centralizado de administración de relojes biométricos ZKTeco para múltiples sucursales." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/41d44a28-c58a-4fc5-b3f7-6a71c940b7bf/id-preview-c568c685--d1f2f497-8354-4c8f-bda6-a470ed77ae62.lovable.app-1781207749466.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/41d44a28-c58a-4fc5-b3f7-6a71c940b7bf/id-preview-c568c685--d1f2f497-8354-4c8f-bda6-a470ed77ae62.lovable.app-1781207749466.png" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
