@@ -30,8 +30,8 @@ export const Route = createFileRoute("/relojes")({
 });
 
 function RelojesPage() {
-  const [relojes, setRelojes] = useState<RelojFront[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [relojes, setRelojes] = useState<RelojFront[]>(relojesMock as RelojFront[]);
+  const [loading, setLoading] = useState(false);
 
   const cargarDispositivo = () => {
     setLoading(true);
