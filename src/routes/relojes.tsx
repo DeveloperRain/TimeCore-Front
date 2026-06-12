@@ -55,19 +55,8 @@ function RelojesPage() {
         console.log("Dispositivo cargado:", reloj);
       })
       .catch((err) => {
-        console.error("Error cargando dispositivo:", err);
-
-        setRelojes([
-          {
-            id: 1,
-            nombre: "Reloj ZKTeco Principal",
-            ip: "192.168.1.50",
-            puerto: 4370,
-            ubicacion: "Reloj Principal",
-            estado: "Desconectado",
-            ultimaSync: "Sin conexión",
-          },
-        ]);
+        console.warn("API no disponible, usando datos simulados:", err);
+        setRelojes(relojesMock as RelojFront[]);
       })
       .finally(() => {
         setLoading(false);
