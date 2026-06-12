@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { useEffect, useState } from "react";
+import { relojes as relojesMock } from "@/lib/mock-data";
 import { timecoreApi } from "@/lib/api/timecore";
 import { Plug, RefreshCw, Wifi, WifiOff } from "lucide-react";
 
