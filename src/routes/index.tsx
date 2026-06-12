@@ -1,3 +1,5 @@
+import { timecoreApi } from "@/lib/api/timecore";
+import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import {
@@ -63,6 +65,19 @@ const actividad = [
 ];
 
 function Dashboard() {
+
+  console.log("Dashboard cargó");
+  
+  useEffect(() => {
+  timecoreApi.getUsuarios()
+    .then((res) => {
+      console.log("Usuarios desde FastAPI:", res);
+    })
+    .catch((err) => {
+      console.error("Error obteniendo usuarios:", err);
+    });
+}, []);
+
   return (
     <AppShell title="Dashboard" subtitle="Resumen general del sistema">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
@@ -161,3 +176,5 @@ function Dashboard() {
     </AppShell>
   );
 }
+
+

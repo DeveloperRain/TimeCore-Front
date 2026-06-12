@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { empleados, sucursalesNombres, type Empleado } from "@/lib/mock-data";
+import { useEffect, useState } from "react";
+import { sucursalesNombres, type Empleado } from "@/lib/mock-data";
+import { timecoreApi } from "@/lib/api/timecore";
 import { Search, Plus, Pencil, Trash2, X } from "lucide-react";
 
 export const Route = createFileRoute("/empleados")({
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/empleados")({
   component: EmpleadosPage,
 });
 
+
 function EmpleadosPage() {
   const [query, setQuery] = useState("");
   const [filterSucursal, setFilterSucursal] = useState("");
@@ -21,6 +23,33 @@ function EmpleadosPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Empleado | null>(null);
 
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    timecoreApi.getUsuarios()
+      .then((res) => {
+        const empleadosApi: Empleado[] = res.data.map((u: any) => ({
+          id: u.uid,
+          codigo: u.user_id,
+          nombre: u.name,
+          puesto: String(u.role ?? "Empleado"),
+          sucursal: "Reloj Principal",
+          email: "Sin correo",
+          estado: "Activo",
+        }));
+
+        setEmpleados(empleadosApi);
+
+        console.log("Usuarios cargados:", empleadosApi);
+      })
+      .catch((err) => {
+        console.error("Error cargando empleados:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
   const filtered = empleados.filter((e) => {
     const matchQ =
       !query ||
@@ -42,7 +71,14 @@ function EmpleadosPage() {
   };
 
   return (
-    <AppShell title="Gestión de Empleados" subtitle={`${filtered.length} empleados encontrados`}>
+    <AppShell
+  title="Gestión de Empleados"
+  subtitle={
+    loading
+      ? "Cargando empleados..."
+      : `${filtered.length} empleados encontrados`
+  }
+>
       <div className="rounded-xl border border-border bg-card shadow-sm">
         <div className="p-4 md:p-5 border-b border-border flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 flex-1 min-w-0">
