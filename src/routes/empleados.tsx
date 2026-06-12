@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useEffect, useState } from "react";
-import { sucursalesNombres, type Empleado } from "@/lib/mock-data";
+import { sucursalesNombres, empleados as empleadosMock, type Empleado } from "@/lib/mock-data";
 import { timecoreApi } from "@/lib/api/timecore";
 import { Search, Plus, Pencil, Trash2, X } from "lucide-react";
 
