@@ -23,10 +23,11 @@ function EmpleadosPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Empleado | null>(null);
 
-  const [empleados, setEmpleados] = useState<Empleado[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [empleados, setEmpleados] = useState<Empleado[]>(empleadosMock);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
     timecoreApi.getUsuarios()
       .then((res) => {
         const empleadosApi: Empleado[] = res.data.map((u: any) => ({
@@ -38,17 +39,13 @@ function EmpleadosPage() {
           email: "Sin correo",
           estado: "Activo",
         }));
-
         setEmpleados(empleadosApi);
-
-        console.log("Usuarios cargados:", empleadosApi);
       })
       .catch((err) => {
-        console.error("Error cargando empleados:", err);
+        console.warn("API no disponible, usando datos simulados:", err);
+        setEmpleados(empleadosMock);
       })
-      .finally(() => {
-        setLoading(false);
-      });
+      .finally(() => setLoading(false));
   }, []);
   const filtered = empleados.filter((e) => {
     const matchQ =
