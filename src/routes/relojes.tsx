@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useEffect, useState } from "react";
+import { relojes as relojesMock } from "@/lib/mock-data";
 import { timecoreApi } from "@/lib/api/timecore";
 import { Plug, RefreshCw, Wifi, WifiOff } from "lucide-react";
 
@@ -29,8 +30,8 @@ export const Route = createFileRoute("/relojes")({
 });
 
 function RelojesPage() {
-  const [relojes, setRelojes] = useState<RelojFront[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [relojes, setRelojes] = useState<RelojFront[]>(relojesMock as RelojFront[]);
+  const [loading, setLoading] = useState(false);
 
   const cargarDispositivo = () => {
     setLoading(true);
@@ -54,19 +55,8 @@ function RelojesPage() {
         console.log("Dispositivo cargado:", reloj);
       })
       .catch((err) => {
-        console.error("Error cargando dispositivo:", err);
-
-        setRelojes([
-          {
-            id: 1,
-            nombre: "Reloj ZKTeco Principal",
-            ip: "192.168.1.50",
-            puerto: 4370,
-            ubicacion: "Reloj Principal",
-            estado: "Desconectado",
-            ultimaSync: "Sin conexión",
-          },
-        ]);
+        console.warn("API no disponible, usando datos simulados:", err);
+        setRelojes(relojesMock as RelojFront[]);
       })
       .finally(() => {
         setLoading(false);
