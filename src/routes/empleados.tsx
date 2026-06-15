@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useEffect, useState } from "react";
-import { sucursalesNombres, empleados as empleadosMock, type Empleado } from "@/lib/mock-data";
+import { sucursalesNombres, type Empleado } from "@/lib/mock-data";
 import { timecoreApi } from "@/lib/api/timecore";
 import { Search, Plus, Pencil, Trash2, X } from "lucide-react";
 
@@ -23,17 +23,18 @@ function EmpleadosPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Empleado | null>(null);
 
-  const [empleados, setEmpleados] = useState<Empleado[]>(empleadosMock);
-  const [loading, setLoading] = useState(false);
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     timecoreApi.getUsuarios()
       .then((res) => {
-        const empleadosApi: Empleado[] = res.data.map((u: any) => ({
+        const lista = Array.isArray(res) ? res : (res?.data ?? []);
+        const empleadosApi: Empleado[] = lista.map((u: any) => ({
           id: u.uid,
-          codigo: u.user_id,
-          nombre: u.name,
+          codigo: String(u.user_id ?? u.uid ?? ""),
+          nombre: String(u.name ?? "Sin nombre"),
           puesto: String(u.role ?? "Empleado"),
           sucursal: "Reloj Principal",
           email: "Sin correo",
@@ -42,8 +43,8 @@ function EmpleadosPage() {
         setEmpleados(empleadosApi);
       })
       .catch((err) => {
-        console.warn("API no disponible, usando datos simulados:", err);
-        setEmpleados(empleadosMock);
+        console.error("Error cargando empleados:", err);
+        setEmpleados([]);
       })
       .finally(() => setLoading(false));
   }, []);
