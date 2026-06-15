@@ -9,128 +9,179 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SucursalesRouteImport } from './routes/sucursales'
-import { Route as RelojesRouteImport } from './routes/relojes'
-import { Route as EmpleadosRouteImport } from './routes/empleados'
-import { Route as AsistenciasRouteImport } from './routes/asistencias'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedSucursalesRouteImport } from './routes/_authenticated/sucursales'
+import { Route as AuthenticatedRelojesRouteImport } from './routes/_authenticated/relojes'
+import { Route as AuthenticatedEmpleadosRouteImport } from './routes/_authenticated/empleados'
+import { Route as AuthenticatedAsistenciasRouteImport } from './routes/_authenticated/asistencias'
 
-const SucursalesRoute = SucursalesRouteImport.update({
-  id: '/sucursales',
-  path: '/sucursales',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RelojesRoute = RelojesRouteImport.update({
-  id: '/relojes',
-  path: '/relojes',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EmpleadosRoute = EmpleadosRouteImport.update({
-  id: '/empleados',
-  path: '/empleados',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AsistenciasRoute = AsistenciasRouteImport.update({
-  id: '/asistencias',
-  path: '/asistencias',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSucursalesRoute = AuthenticatedSucursalesRouteImport.update({
+  id: '/sucursales',
+  path: '/sucursales',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRelojesRoute = AuthenticatedRelojesRouteImport.update({
+  id: '/relojes',
+  path: '/relojes',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedEmpleadosRoute = AuthenticatedEmpleadosRouteImport.update({
+  id: '/empleados',
+  path: '/empleados',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAsistenciasRoute =
+  AuthenticatedAsistenciasRouteImport.update({
+    id: '/asistencias',
+    path: '/asistencias',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/asistencias': typeof AsistenciasRoute
-  '/empleados': typeof EmpleadosRoute
-  '/relojes': typeof RelojesRoute
-  '/sucursales': typeof SucursalesRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/auth': typeof AuthRoute
+  '/asistencias': typeof AuthenticatedAsistenciasRoute
+  '/empleados': typeof AuthenticatedEmpleadosRoute
+  '/relojes': typeof AuthenticatedRelojesRoute
+  '/sucursales': typeof AuthenticatedSucursalesRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/asistencias': typeof AsistenciasRoute
-  '/empleados': typeof EmpleadosRoute
-  '/relojes': typeof RelojesRoute
-  '/sucursales': typeof SucursalesRoute
+  '/auth': typeof AuthRoute
+  '/asistencias': typeof AuthenticatedAsistenciasRoute
+  '/empleados': typeof AuthenticatedEmpleadosRoute
+  '/relojes': typeof AuthenticatedRelojesRoute
+  '/sucursales': typeof AuthenticatedSucursalesRoute
+  '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/asistencias': typeof AsistenciasRoute
-  '/empleados': typeof EmpleadosRoute
-  '/relojes': typeof RelojesRoute
-  '/sucursales': typeof SucursalesRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/asistencias': typeof AuthenticatedAsistenciasRoute
+  '/_authenticated/empleados': typeof AuthenticatedEmpleadosRoute
+  '/_authenticated/relojes': typeof AuthenticatedRelojesRoute
+  '/_authenticated/sucursales': typeof AuthenticatedSucursalesRoute
+  '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/asistencias' | '/empleados' | '/relojes' | '/sucursales'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/asistencias' | '/empleados' | '/relojes' | '/sucursales'
-  id:
-    | '__root__'
+  fullPaths:
     | '/'
+    | '/auth'
     | '/asistencias'
     | '/empleados'
     | '/relojes'
     | '/sucursales'
+  fileRoutesByTo: FileRoutesByTo
+  to: '/auth' | '/asistencias' | '/empleados' | '/relojes' | '/sucursales' | '/'
+  id:
+    | '__root__'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/asistencias'
+    | '/_authenticated/empleados'
+    | '/_authenticated/relojes'
+    | '/_authenticated/sucursales'
+    | '/_authenticated/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AsistenciasRoute: typeof AsistenciasRoute
-  EmpleadosRoute: typeof EmpleadosRoute
-  RelojesRoute: typeof RelojesRoute
-  SucursalesRoute: typeof SucursalesRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/sucursales': {
-      id: '/sucursales'
-      path: '/sucursales'
-      fullPath: '/sucursales'
-      preLoaderRoute: typeof SucursalesRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/relojes': {
-      id: '/relojes'
-      path: '/relojes'
-      fullPath: '/relojes'
-      preLoaderRoute: typeof RelojesRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/empleados': {
-      id: '/empleados'
-      path: '/empleados'
-      fullPath: '/empleados'
-      preLoaderRoute: typeof EmpleadosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/asistencias': {
-      id: '/asistencias'
-      path: '/asistencias'
-      fullPath: '/asistencias'
-      preLoaderRoute: typeof AsistenciasRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
+    '/_authenticated/': {
+      id: '/_authenticated/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sucursales': {
+      id: '/_authenticated/sucursales'
+      path: '/sucursales'
+      fullPath: '/sucursales'
+      preLoaderRoute: typeof AuthenticatedSucursalesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/relojes': {
+      id: '/_authenticated/relojes'
+      path: '/relojes'
+      fullPath: '/relojes'
+      preLoaderRoute: typeof AuthenticatedRelojesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/empleados': {
+      id: '/_authenticated/empleados'
+      path: '/empleados'
+      fullPath: '/empleados'
+      preLoaderRoute: typeof AuthenticatedEmpleadosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/asistencias': {
+      id: '/_authenticated/asistencias'
+      path: '/asistencias'
+      fullPath: '/asistencias'
+      preLoaderRoute: typeof AuthenticatedAsistenciasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAsistenciasRoute: typeof AuthenticatedAsistenciasRoute
+  AuthenticatedEmpleadosRoute: typeof AuthenticatedEmpleadosRoute
+  AuthenticatedRelojesRoute: typeof AuthenticatedRelojesRoute
+  AuthenticatedSucursalesRoute: typeof AuthenticatedSucursalesRoute
+  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAsistenciasRoute: AuthenticatedAsistenciasRoute,
+  AuthenticatedEmpleadosRoute: AuthenticatedEmpleadosRoute,
+  AuthenticatedRelojesRoute: AuthenticatedRelojesRoute,
+  AuthenticatedSucursalesRoute: AuthenticatedSucursalesRoute,
+  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AsistenciasRoute: AsistenciasRoute,
-  EmpleadosRoute: EmpleadosRoute,
-  RelojesRoute: RelojesRoute,
-  SucursalesRoute: SucursalesRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
