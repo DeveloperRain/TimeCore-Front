@@ -12,7 +12,7 @@ type SucursalFront = {
   relojes: number;
 };
 
-export const Route = createFileRoute("/sucursales")({
+export const Route = createFileRoute("/_authenticated/sucursales")({
   head: () => ({
     meta: [
       { title: "Sucursales — TimeCore" },

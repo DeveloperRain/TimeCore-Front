@@ -5,7 +5,7 @@ import { sucursalesNombres, type Asistencia, type Empleado } from "@/lib/mock-da
 import { timecoreApi, getExcelAsistenciasUrl } from "@/lib/api/timecore";
 import { Download, Filter } from "lucide-react";
 
-export const Route = createFileRoute("/asistencias")({
+export const Route = createFileRoute("/_authenticated/asistencias")({
   head: () => ({
     meta: [
       { title: "Asistencias — TimeCore" },
