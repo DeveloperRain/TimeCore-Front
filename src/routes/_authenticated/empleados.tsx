@@ -5,7 +5,7 @@ import { sucursalesNombres, type Empleado } from "@/lib/mock-data";
 import { timecoreApi } from "@/lib/api/timecore";
 import { Search, Plus, Pencil, Trash2, X } from "lucide-react";
 
-export const Route = createFileRoute("/empleados")({
+export const Route = createFileRoute("/_authenticated/empleados")({
   head: () => ({
     meta: [
       { title: "Empleados — TimeCore" },

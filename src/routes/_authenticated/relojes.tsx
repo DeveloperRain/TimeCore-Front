@@ -15,7 +15,7 @@ type RelojFront = {
   ultimaSync: string;
 };
 
-export const Route = createFileRoute("/relojes")({
+export const Route = createFileRoute("/_authenticated/relojes")({
   head: () => ({
     meta: [
       { title: "Relojes — TimeCore" },
