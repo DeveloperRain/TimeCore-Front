@@ -182,7 +182,7 @@ function EmpleadosPage() {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
-                    No se encontraron empleados con los filtros actuales.
+                    Cargando Datos...
                   </td>
                 </tr>
               )}

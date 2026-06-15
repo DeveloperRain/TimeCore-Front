@@ -1,5 +1,5 @@
 import { timecoreApi } from "@/lib/api/timecore";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import {
@@ -15,7 +15,11 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Dashboard — TimeCore" },
-      { name: "description", content: "Resumen general del sistema TimeCore: empleados, asistencias, relojes y sucursales." },
+      {
+        name: "description",
+        content:
+          "Resumen general del sistema TimeCore: empleados, asistencias, relojes y sucursales.",
+      },
     ],
   }),
   component: Dashboard,
@@ -29,54 +33,170 @@ type Kpi = {
   accent: string;
 };
 
-const kpis: Kpi[] = [
-  { label: "Total de empleados", value: "125", delta: "+3 este mes", icon: Users, accent: "bg-primary/10 text-primary" },
-  { label: "Relojes conectados", value: "4 / 5", delta: "1 sin conexión", icon: Fingerprint, accent: "bg-success/10 text-success" },
-  { label: "Asistencias del día", value: "98", delta: "+12% vs ayer", icon: ClipboardCheck, accent: "bg-chart-2/10 text-chart-2" },
-  { label: "Sucursales activas", value: "5", delta: "Sin cambios", icon: Building2, accent: "bg-warning/20 text-warning-foreground" },
-];
+type ActividadItem = {
+  hora: string;
+  texto: string;
+  tipo: "sync" | "in" | "warn" | "new";
+};
 
-const barData = [
-  { day: "Lun", value: 92 },
-  { day: "Mar", value: 105 },
-  { day: "Mié", value: 98 },
-  { day: "Jue", value: 110 },
-  { day: "Vie", value: 115 },
-  { day: "Sáb", value: 60 },
-  { day: "Dom", value: 20 },
-];
-const maxBar = Math.max(...barData.map((d) => d.value));
-
-const distribucion = [
-  { label: "Matriz CDMX", value: 42, color: "bg-primary" },
-  { label: "Sucursal Norte", value: 18, color: "bg-chart-2" },
-  { label: "Sucursal Sur", value: 15, color: "bg-chart-3" },
-  { label: "Guadalajara", value: 22, color: "bg-success" },
-  { label: "Monterrey", value: 28, color: "bg-warning" },
-];
-const totalDist = distribucion.reduce((s, d) => s + d.value, 0);
-
-const actividad = [
-  { hora: "09:12", texto: "Reloj ZKTeco K40-Matriz sincronizó 42 registros", tipo: "sync" },
-  { hora: "09:08", texto: "Empleado EMP-005 marcó entrada en Sucursal Guadalajara", tipo: "in" },
-  { hora: "08:45", texto: "Reloj ZKTeco K40-Sur quedó desconectado", tipo: "warn" },
-  { hora: "08:30", texto: "Nuevo empleado registrado: Sofía Hernández", tipo: "new" },
-  { hora: "08:02", texto: "Patricia Núñez marcó entrada en Sucursal Monterrey", tipo: "in" },
-];
+type BarItem = {
+  day: string;
+  value: number;
+};
 
 function Dashboard() {
+  const [totalUsuarios, setTotalUsuarios] = useState(0);
+  const [totalAsistencias, setTotalAsistencias] = useState(0);
+  const [relojConectado, setRelojConectado] = useState(false);
+  const [actividad, setActividad] = useState<ActividadItem[]>([]);
+  const [barData, setBarData] = useState<BarItem[]>([
+    { day: "Lun", value: 0 },
+    { day: "Mar", value: 0 },
+    { day: "Mié", value: 0 },
+    { day: "Jue", value: 0 },
+    { day: "Vie", value: 0 },
+    { day: "Sáb", value: 0 },
+    { day: "Dom", value: 0 },
+  ]);
 
-  console.log("Dashboard cargó");
-  
   useEffect(() => {
-  timecoreApi.getUsuarios()
-    .then((res) => {
-      console.log("Usuarios desde FastAPI:", res);
-    })
-    .catch((err) => {
-      console.error("Error obteniendo usuarios:", err);
-    });
-}, []);
+    // Obtener resumen del dashboard
+    timecoreApi.getUsuarios()
+      .then((res) => {
+        setTotalUsuarios(res.data?.length ?? 0);
+      })
+      .catch((err) => {
+        console.error("Error obteniendo usuarios:", err);
+      });
+
+    timecoreApi.getDashboardSummary()
+      .then(() => {
+        setRelojConectado(true);
+      })
+      .catch(() => {
+        setRelojConectado(false);
+      });
+
+    timecoreApi.getAsistencias()
+      .then((res) => {
+        const registros = res.data ?? [];
+        setTotalAsistencias(registros.length);
+
+        const ultimas: ActividadItem[] = registros.slice(0, 8).map((a: any) => {
+          const rawDate = String(a.timestamp ?? a.punch_time ?? a.time ?? "");
+          const hora = rawDate.includes("T")
+            ? rawDate.split("T")[1]?.slice(0, 5)
+            : rawDate.split(" ")[1]?.slice(0, 5);
+
+          const codigo = String(a.user_id ?? a.uid ?? "Sin código");
+
+          return {
+            hora: hora || "--:--",
+            texto: `Usuario ${codigo} registró asistencia en Reloj Principal`,
+            tipo: "in",
+          };
+        });
+
+        setActividad(ultimas);
+
+        const counts: Record<string, number> = {
+          Lun: 0,
+          Mar: 0,
+          Mié: 0,
+          Jue: 0,
+          Vie: 0,
+          Sáb: 0,
+          Dom: 0,
+        };
+
+        registros.forEach((a: any) => {
+          const rawDate = String(a.timestamp ?? a.punch_time ?? a.time ?? "");
+          const fecha = rawDate.includes("T")
+            ? rawDate.split("T")[0]
+            : rawDate.split(" ")[0];
+
+          const date = new Date(fecha);
+          const day = date.getDay();
+
+          const mapDays: Record<number, string> = {
+            0: "Dom",
+            1: "Lun",
+            2: "Mar",
+            3: "Mié",
+            4: "Jue",
+            5: "Vie",
+            6: "Sáb",
+          };
+
+          const label = mapDays[day];
+
+          if (label) {
+            counts[label] += 1;
+          }
+        });
+
+        setBarData([
+          { day: "Lun", value: counts.Lun },
+          { day: "Mar", value: counts.Mar },
+          { day: "Mié", value: counts.Mié },
+          { day: "Jue", value: counts.Jue },
+          { day: "Vie", value: counts.Vie },
+          { day: "Sáb", value: counts.Sáb },
+          { day: "Dom", value: counts.Dom },
+        ]);
+      })
+      .catch((err) => {
+        console.error("Error obteniendo asistencias:", err);
+      });
+  }, []);
+
+  const kpis: Kpi[] = [
+    {
+      label: "Total de empleados",
+      value: String(totalUsuarios),
+      delta: "Desde reloj biométrico",
+      icon: Users,
+      accent: "bg-primary/10 text-primary",
+    },
+    {
+      label: "Relojes conectados",
+      value: relojConectado ? "1 / 1" : "0 / 1",
+      delta: relojConectado ? "Conexión activa" : "Sin conexión",
+      icon: Fingerprint,
+      accent: relojConectado
+        ? "bg-success/10 text-success"
+        : "bg-destructive/10 text-destructive",
+    },
+    {
+      label: "Asistencias registradas",
+      value: String(totalAsistencias),
+      delta: "Registros del reloj",
+      icon: ClipboardCheck,
+      accent: "bg-chart-2/10 text-chart-2",
+    },
+    {
+      label: "Sucursales activas",
+      value: relojConectado ? "1" : "0",
+      delta: "Reloj Principal",
+      icon: Building2,
+      accent: "bg-warning/20 text-warning-foreground",
+    },
+  ];
+
+  const maxBar = Math.max(...barData.map((d) => d.value), 1);
+
+  const distribucion = [
+    {
+      label: "Reloj Principal",
+      value: totalUsuarios,
+      color: "bg-primary",
+    },
+  ];
+
+  const totalDist = Math.max(
+    distribucion.reduce((s, d) => s + d.value, 0),
+    1
+  );
 
   return (
     <AppShell title="Dashboard" subtitle="Resumen general del sistema">
@@ -105,12 +225,13 @@ function Dashboard() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-base font-semibold text-foreground">Asistencias por día</h3>
-              <p className="text-xs text-muted-foreground">Últimos 7 días</p>
+              <p className="text-xs text-muted-foreground">Registros agrupados por día</p>
             </div>
             <span className="text-xs px-2 py-1 rounded-md bg-secondary text-secondary-foreground font-medium">
-              Semana actual
+              Datos reales
             </span>
           </div>
+
           <div className="flex items-end justify-between gap-3 h-56">
             {barData.map((b) => (
               <div key={b.day} className="flex flex-col items-center gap-2 flex-1">
@@ -118,9 +239,11 @@ function Dashboard() {
                   <div
                     className="w-full max-w-[44px] rounded-t-md bg-gradient-to-t from-primary to-chart-2 transition-all"
                     style={{ height: `${(b.value / maxBar) * 100}%` }}
+                    title={`${b.value} registros`}
                   />
                 </div>
                 <span className="text-xs text-muted-foreground">{b.day}</span>
+                <span className="text-xs font-semibold text-foreground">{b.value}</span>
               </div>
             ))}
           </div>
@@ -153,28 +276,35 @@ function Dashboard() {
           <Activity className="h-4 w-4 text-primary" />
           <h3 className="text-base font-semibold text-foreground">Actividad reciente</h3>
         </div>
+
         <ul className="divide-y divide-border">
           {actividad.map((a, i) => (
             <li key={i} className="flex items-start gap-4 py-3">
-              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0 pt-0.5">{a.hora}</span>
+              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0 pt-0.5">
+                {a.hora}
+              </span>
               <span
                 className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
                   a.tipo === "warn"
                     ? "bg-destructive"
                     : a.tipo === "sync"
-                    ? "bg-chart-2"
-                    : a.tipo === "new"
-                    ? "bg-warning"
-                    : "bg-success"
+                      ? "bg-chart-2"
+                      : a.tipo === "new"
+                        ? "bg-warning"
+                        : "bg-success"
                 }`}
               />
               <span className="text-sm text-foreground flex-1">{a.texto}</span>
             </li>
           ))}
+
+          {actividad.length === 0 && (
+            <li className="py-6 text-sm text-muted-foreground">
+              No hay actividad reciente disponible.
+            </li>
+          )}
         </ul>
       </div>
     </AppShell>
   );
 }
-
-

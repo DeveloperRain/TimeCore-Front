@@ -20,7 +20,36 @@ async function request(endpoint: string, options?: RequestInit) {
 export const timecoreApi = {
   health: () => request("/"),
 
-  getUsuarios: () => request("/users/"),
+  // FRONTEND: usar PostgreSQL
+  getUsuarios: () => request("/db/users"),
+  getAsistencias: () => request("/db/attendance"),
+  getFechasAsistencia: () => request("/db/attendance/dates"),
+  getReporteAsistencia: (startDate: string, endDate: string) =>
+    request(`/db/attendance/report?start_date=${startDate}&end_date=${endDate}`),
+
+  getDashboardSummary: () => request("/dashboard/summary"),
+  getDashboardActivity: () => request("/dashboard/activity"),
+
+  // SINCRONIZACIÓN: reloj -> PostgreSQL
+  sincronizarUsuarios: () =>
+    request("/sync/users", {
+      method: "POST",
+    }),
+
+  sincronizarAsistencias: () =>
+    request("/sync/attendance", {
+      method: "POST",
+    }),
+
+  sincronizarTodo: () =>
+    request("/sync/all", {
+      method: "POST",
+    }),
+
+  // ENDPOINTS DIRECTOS AL RELOJ: solo pruebas técnicas
+  getUsuariosReloj: () => request("/users/"),
+  getAsistenciasReloj: () => request("/users/attendance"),
+  getDispositivo: () => request("/device/info"),
 
   crearUsuario: (data: {
     uid: number;
@@ -46,21 +75,10 @@ export const timecoreApi = {
       body: JSON.stringify(data),
     }),
 
-
-
   eliminarUsuario: (uid: number) =>
     request(`/users/${uid}`, {
       method: "DELETE",
     }),
-
-  getAsistencias: () => request("/users/attendance"),
-
-  getFechasAsistencia: () => request("/users/attendance/dates"),
-
-  getReporteAsistencia: (startDate: string, endDate: string) =>
-    request(`/users/attendance/report?start_date=${startDate}&end_date=${endDate}`),
-
-  getDispositivo: () => request("/device/info"),
 };
 
 export function getExcelAsistenciasUrl() {
