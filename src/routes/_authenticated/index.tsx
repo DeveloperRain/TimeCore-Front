@@ -61,21 +61,18 @@ function Dashboard() {
 
   useEffect(() => {
     // Obtener resumen del dashboard
-    timecoreApi.getUsuarios()
-      .then((res) => {
-        setTotalUsuarios(res.data?.length ?? 0);
-      })
-      .catch((err) => {
-        console.error("Error obteniendo usuarios:", err);
-      });
-
     timecoreApi.getDashboardSummary()
-      .then(() => {
-        setRelojConectado(true);
-      })
-      .catch(() => {
-        setRelojConectado(false);
-      });
+  .then((res) => {
+    const data = res.data ?? {};
+
+    setTotalUsuarios(data.total_users ?? 0);
+    setTotalAsistencias(data.total_attendance ?? 0);
+    setRelojConectado((data.connected_devices ?? 0) > 0);
+  })
+  .catch((err) => {
+    console.error("Error obteniendo resumen:", err);
+    setRelojConectado(false);
+  });
 
     timecoreApi.getAsistencias()
       .then((res) => {
