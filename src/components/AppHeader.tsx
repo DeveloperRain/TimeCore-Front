@@ -55,12 +55,6 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
             <Bell className="h-4 w-4" />
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
           </button>
-          {user && (
-            <div className="hidden sm:flex flex-col items-end mr-1">
-              <span className="text-sm font-medium text-foreground leading-tight">{user.name}</span>
-              <span className="text-xs text-muted-foreground leading-tight">{user.role}</span>
-            </div>
-          )}
           <button
             onClick={handleSignOut}
             title="Cerrar sesión"
@@ -68,6 +62,12 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
           >
             <LogOut className="h-4 w-4" />
           </button>
+          {user && (
+            <div className="hidden sm:flex flex-col items-end mr-1">
+              <span className="text-sm font-medium text-foreground leading-tight">{user.name}</span>
+              <span className="text-xs text-muted-foreground leading-tight">{user.role}</span>
+            </div>
+          )}
         </div>
       </div>
     </header>
