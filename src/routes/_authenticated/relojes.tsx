@@ -1,18 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useEffect, useState } from "react";
-
 import { timecoreApi } from "@/lib/api/timecore";
-import { Plug, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import {
+  Plug,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Plus,
+  Pencil,
+  Trash2,
+  X,
+} from "lucide-react";
 
 type RelojFront = {
   id: number;
   nombre: string;
   ip: string;
   puerto: number;
+  sucursal: string;
   ubicacion: string;
-  estado: "Conectado" | "Desconectado";
+  estado: "Conectado" | "Desconectado" | "Desconocido";
   ultimaSync: string;
+  activo: boolean;
 };
 
 export const Route = createFileRoute("/_authenticated/relojes")({
@@ -32,29 +42,47 @@ export const Route = createFileRoute("/_authenticated/relojes")({
 function RelojesPage() {
   const [relojes, setRelojes] = useState<RelojFront[]>([]);
   const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<RelojFront | null>(null);
 
-  const cargarDispositivo = () => {
+  const [form, setForm] = useState({
+    nombre: "",
+    ip: "",
+    puerto: 4370,
+    sucursal: "",
+    ubicacion: "",
+    activo: true,
+  });
+
+  const cargarRelojes = () => {
     setLoading(true);
 
     timecoreApi
-      .getDispositivo()
+      .getDevices()
       .then((res) => {
-        const info = (res?.data ?? res) ?? {};
+        const data = res.data ?? [];
 
-        const reloj: RelojFront = {
-          id: 1,
-          nombre: String(info.device_name ?? info.platform ?? "Reloj ZKTeco Principal"),
-          ip: String(info.ip ?? "—"),
-          puerto: Number(info.port ?? 4370),
-          ubicacion: "Reloj Principal",
-          estado: "Conectado",
-          ultimaSync: new Date().toLocaleString("es-MX"),
-        };
+        const relojesApi: RelojFront[] = data.map((r: any) => ({
+          id: r.id,
+          nombre: String(r.nombre ?? r.name ?? "Reloj sin nombre"),
+          ip: String(r.ip ?? "—"),
+          puerto: Number(r.puerto ?? r.port ?? 4370),
+          sucursal: String(r.sucursal ?? r.location ?? "Sin sucursal"),
+          ubicacion: String(r.ubicacion ?? r.description ?? "Sin ubicación"),
+          estado: String(r.estado ?? r.status ?? "Desconocido") as
+            | "Conectado"
+            | "Desconectado"
+            | "Desconocido",
+          ultimaSync: r.ultima_sincronizacion
+            ? new Date(r.ultima_sincronizacion).toLocaleString("es-MX")
+            : "Sin sincronización",
+          activo: Boolean(r.activo ?? r.is_active ?? true),
+        }));
 
-        setRelojes([reloj]);
+        setRelojes(relojesApi);
       })
       .catch((err) => {
-        console.error("Error cargando dispositivo:", err);
+        console.error("Error cargando relojes:", err);
         setRelojes([]);
       })
       .finally(() => {
@@ -63,8 +91,87 @@ function RelojesPage() {
   };
 
   useEffect(() => {
-    cargarDispositivo();
+    cargarRelojes();
   }, []);
+
+  const openAdd = () => {
+    setEditing(null);
+    setForm({
+      nombre: "",
+      ip: "",
+      puerto: 4370,
+      sucursal: "",
+      ubicacion: "",
+      activo: true,
+    });
+    setOpen(true);
+  };
+
+  const openEdit = (r: RelojFront) => {
+    setEditing(r);
+    setForm({
+      nombre: r.nombre,
+      ip: r.ip,
+      puerto: r.puerto,
+      sucursal: r.sucursal,
+      ubicacion: r.ubicacion,
+      activo: r.activo,
+    });
+    setOpen(true);
+  };
+
+  const guardarReloj = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const payload = {
+      nombre: form.nombre,
+      ip: form.ip,
+      puerto: Number(form.puerto),
+      sucursal: form.sucursal,
+      ubicacion: form.ubicacion,
+      activo: form.activo,
+    };
+
+    const request = editing
+      ? timecoreApi.actualizarDevice(editing.id, payload)
+      : timecoreApi.crearDevice(payload);
+
+    request
+      .then(() => {
+        setOpen(false);
+        cargarRelojes();
+      })
+      .catch((err) => {
+        console.error("Error guardando reloj:", err);
+      });
+  };
+
+  const eliminarReloj = (id: number) => {
+    const confirmar = window.confirm("¿Seguro que quieres eliminar este reloj?");
+
+    if (!confirmar) return;
+
+    timecoreApi
+      .eliminarDevice(id)
+      .then(() => {
+        cargarRelojes();
+      })
+      .catch((err) => {
+        console.error("Error eliminando reloj:", err);
+      });
+  };
+
+  const sincronizarReloj = (id: number) => {
+    timecoreApi
+      .sincronizarDevice(id)
+      .then((res) => {
+        console.log("Reloj sincronizado:", res);
+        cargarRelojes();
+      })
+      .catch((err) => {
+        console.error("Error sincronizando reloj:", err);
+      });
+  };
 
   const conectados = relojes.filter((r) => r.estado === "Conectado").length;
 
@@ -73,109 +180,195 @@ function RelojesPage() {
       title="Gestión de Relojes"
       subtitle={
         loading
-          ? "Verificando conexión con reloj biométrico..."
+          ? "Cargando relojes registrados..."
           : `${conectados} de ${relojes.length} relojes conectados`
       }
     >
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard
-          label="Total de relojes"
-          value={relojes.length}
-          accent="bg-primary/10 text-primary"
-          icon={Plug}
-        />
-        <StatCard
-          label="Conectados"
-          value={conectados}
-          accent="bg-success/10 text-success"
-          icon={Wifi}
-        />
-        <StatCard
-          label="Desconectados"
-          value={relojes.length - conectados}
-          accent="bg-destructive/10 text-destructive"
-          icon={WifiOff}
-        />
+        <StatCard label="Total de relojes" value={relojes.length} accent="bg-primary/10 text-primary" icon={Plug} />
+        <StatCard label="Conectados" value={conectados} accent="bg-success/10 text-success" icon={Wifi} />
+        <StatCard label="Desconectados" value={relojes.length - conectados} accent="bg-destructive/10 text-destructive" icon={WifiOff} />
       </div>
 
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/60 text-muted-foreground text-xs uppercase tracking-wider">
-            <tr>
-              <th className="text-left font-semibold px-5 py-3">Nombre</th>
-              <th className="text-left font-semibold px-5 py-3">Dirección IP</th>
-              <th className="text-left font-semibold px-5 py-3">Puerto</th>
-              <th className="text-left font-semibold px-5 py-3">Ubicación</th>
-              <th className="text-left font-semibold px-5 py-3">Estado</th>
-              <th className="text-left font-semibold px-5 py-3">Última sincronización</th>
-              <th className="text-right font-semibold px-5 py-3">Acciones</th>
-            </tr>
-          </thead>
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <div className="p-4 md:p-5 border-b border-border flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-foreground">Relojes registrados</h3>
+            <p className="text-xs text-muted-foreground">
+              Administra dispositivos ZKTeco registrados en PostgreSQL.
+            </p>
+          </div>
 
-          <tbody className="divide-y divide-border">
-            {relojes.map((r) => (
-              <tr key={r.id} className="hover:bg-muted/40 transition-colors">
-                <td className="px-5 py-3 font-medium text-foreground">{r.nombre}</td>
-                <td className="px-5 py-3 font-mono text-xs text-muted-foreground">
-                  {r.ip}
-                </td>
-                <td className="px-5 py-3 tabular-nums text-foreground">{r.puerto}</td>
-                <td className="px-5 py-3 text-foreground">{r.ubicacion}</td>
-                <td className="px-5 py-3">
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                      r.estado === "Conectado"
-                        ? "bg-success/10 text-success"
-                        : "bg-destructive/10 text-destructive"
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        r.estado === "Conectado"
-                          ? "bg-success animate-pulse"
-                          : "bg-destructive"
-                      }`}
-                    />
-                    {r.estado}
-                  </span>
-                </td>
-                <td className="px-5 py-3 text-muted-foreground tabular-nums">
-                  {r.ultimaSync}
-                </td>
-                <td className="px-5 py-3">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={cargarDispositivo}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
-                    >
-                      <Plug className="h-3.5 w-3.5" />
-                      Probar conexión
-                    </button>
-                    <button
-                      onClick={cargarDispositivo}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      Sincronizar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+          <button
+            onClick={openAdd}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
+          >
+            <Plus className="h-4 w-4" />
+            Agregar reloj
+          </button>
+        </div>
 
-            {relojes.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/60 text-muted-foreground text-xs uppercase tracking-wider">
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-muted-foreground">
-                  {loading
-                    ? "Verificando reloj biométrico..."
-                    : "No se encontraron relojes registrados."}
-                </td>
+                <th className="text-left font-semibold px-5 py-3">Nombre</th>
+                <th className="text-left font-semibold px-5 py-3">Dirección IP</th>
+                <th className="text-left font-semibold px-5 py-3">Puerto</th>
+                <th className="text-left font-semibold px-5 py-3">Sucursal</th>
+                <th className="text-left font-semibold px-5 py-3">Ubicación</th>
+                <th className="text-left font-semibold px-5 py-3">Estado</th>
+                <th className="text-left font-semibold px-5 py-3">Última sincronización</th>
+                <th className="text-right font-semibold px-5 py-3">Acciones</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+
+            <tbody className="divide-y divide-border">
+              {relojes.map((r) => (
+                <tr key={r.id} className="hover:bg-muted/40 transition-colors">
+                  <td className="px-5 py-3 font-medium text-foreground">{r.nombre}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{r.ip}</td>
+                  <td className="px-5 py-3 tabular-nums text-foreground">{r.puerto}</td>
+                  <td className="px-5 py-3 text-foreground">{r.sucursal}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{r.ubicacion}</td>
+                  <td className="px-5 py-3">
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                        r.estado === "Conectado"
+                          ? "bg-success/10 text-success"
+                          : r.estado === "Desconectado"
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          r.estado === "Conectado"
+                            ? "bg-success animate-pulse"
+                            : r.estado === "Desconectado"
+                            ? "bg-destructive"
+                            : "bg-muted-foreground"
+                        }`}
+                      />
+                      {r.estado}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground tabular-nums">{r.ultimaSync}</td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => sincronizarReloj(r.id)}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Sync
+                      </button>
+
+                      <button
+                        onClick={() => openEdit(r)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        title="Editar"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        onClick={() => eliminarReloj(r.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {relojes.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-5 py-10 text-center text-muted-foreground">
+                    {loading ? "Cargando relojes registrados..." : "No se encontraron relojes registrados."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-xl bg-card border border-border shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="text-lg font-semibold text-foreground">
+                {editing ? "Editar reloj" : "Nuevo reloj"}
+              </h3>
+
+              <button
+                onClick={() => setOpen(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={guardarReloj} className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Nombre" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} placeholder="Reloj Principal" />
+                <Field label="IP" value={form.ip} onChange={(v) => setForm({ ...form, ip: v })} placeholder="192.168.1.50" />
+                <Field label="Puerto" value={String(form.puerto)} onChange={(v) => setForm({ ...form, puerto: Number(v) })} placeholder="4370" />
+                <Field label="Sucursal" value={form.sucursal} onChange={(v) => setForm({ ...form, sucursal: v })} placeholder="Matriz" />
+                <Field label="Ubicación" value={form.ubicacion} onChange={(v) => setForm({ ...form, ubicacion: v })} placeholder="Área de sistemas" className="sm:col-span-2" />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="px-4 py-2 rounded-md text-sm font-medium text-foreground hover:bg-accent"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-hover"
+                >
+                  {editing ? "Guardar cambios" : "Crear reloj"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </AppShell>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className}`}>
+      <label className="text-sm font-medium text-foreground">{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+      />
+    </div>
   );
 }
 
@@ -195,6 +388,7 @@ function StatCard({
       <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${accent}`}>
         <Icon className="h-5 w-5" />
       </div>
+
       <div>
         <p className="text-sm text-muted-foreground">{label}</p>
         <p className="text-2xl font-bold text-foreground">{value}</p>
