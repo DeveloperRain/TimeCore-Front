@@ -41,6 +41,7 @@ export const Route = createFileRoute("/_authenticated/relojes")({
 });
 
 function RelojesPage() {
+  const { sucursales } = useSucursales();
   const [relojes, setRelojes] = useState<RelojFront[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
