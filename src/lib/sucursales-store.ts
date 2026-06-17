@@ -4,12 +4,13 @@ export type Sucursal = {
   id: string;
   nombre: string;
   direccion: string;
+  activo: boolean;
 };
 
 const STORAGE_KEY = "timecore_sucursales";
 
 const DEFAULT_SUCURSALES: Sucursal[] = [
-  { id: "matriz", nombre: "Matriz", direccion: "Sucursal principal" },
+  { id: "matriz", nombre: "Matriz", direccion: "Sucursal principal", activo: true },
 ];
 
 function read(): Sucursal[] {
@@ -19,7 +20,8 @@ function read(): Sucursal[] {
     if (!raw) return DEFAULT_SUCURSALES;
     const parsed = JSON.parse(raw) as Sucursal[];
     if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_SUCURSALES;
-    return parsed;
+    // backfill activo for older entries
+    return parsed.map((s) => ({ ...s, activo: s.activo ?? true }));
   } catch {
     return DEFAULT_SUCURSALES;
   }
@@ -48,8 +50,33 @@ export function useSucursales() {
       id: `${Date.now()}`,
       nombre: nombre.trim(),
       direccion: direccion.trim(),
+      activo: true,
     };
     write([...read(), nueva]);
+  };
+
+  const actualizar = (id: string, data: Partial<Omit<Sucursal, "id">>) => {
+    const prevList = read();
+    const prev = prevList.find((s) => s.id === id);
+    write(
+      prevList.map((s) => {
+        if (s.id !== id) return s;
+        return {
+          ...s,
+          ...data,
+          nombre: data.nombre !== undefined ? data.nombre.trim() : s.nombre,
+          direccion: data.direccion !== undefined ? data.direccion.trim() : s.direccion,
+        };
+      }),
+    );
+    // Si cambió el nombre, propagar a relojes guardados en localStorage si existieran
+    if (prev && data.nombre && data.nombre.trim() !== prev.nombre) {
+      window.dispatchEvent(
+        new CustomEvent("sucursales:renamed", {
+          detail: { from: prev.nombre, to: data.nombre.trim() },
+        }),
+      );
+    }
   };
 
   const eliminar = (id: string) => {
@@ -57,5 +84,5 @@ export function useSucursales() {
     write(read().filter((s) => s.id !== id));
   };
 
-  return { sucursales, agregar, eliminar };
+  return { sucursales, agregar, actualizar, eliminar };
 }
