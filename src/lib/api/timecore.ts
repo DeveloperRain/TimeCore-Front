@@ -91,6 +91,11 @@
       method: "DELETE",
     }),
 
+  activarDevice: (id: number) =>
+  request(`/db/devices/${id}/activate`, {
+    method: "PUT",
+  }),
+
     crearUsuario: (data: {
       uid: number;
       user_id: string;
@@ -114,7 +119,14 @@
         method: "PUT",
         body: JSON.stringify(data),
       }),
+      
 
+      actualizarEstadoEmpleado: (uid: number, status: "Activo" | "Inactivo" | "Baja") =>
+  request(`/db/users/${uid}/status`, {
+    method: "PUT",
+    body: JSON.stringify({ status }),
+  }),
+  
     eliminarUsuario: (uid: number) =>
       request(`/users/${uid}`, {
         method: "DELETE",

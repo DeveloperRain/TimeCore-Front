@@ -45,6 +45,7 @@ function RelojesPage() {
   const [relojes, setRelojes] = useState<RelojFront[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [syncingId, setSyncingId] = useState<number | null>(null);
   const [editing, setEditing] = useState<RelojFront | null>(null);
 
   const [form, setForm] = useState({
@@ -149,7 +150,7 @@ function RelojesPage() {
   };
 
   const eliminarReloj = (id: number) => {
-    const confirmar = window.confirm("¿Seguro que quieres eliminar este reloj?");
+    const confirmar = window.confirm("¿Seguro que quieres desactivar este reloj?");
 
     if (!confirmar) return;
 
@@ -163,6 +164,21 @@ function RelojesPage() {
       });
   };
 
+  const activarReloj = (id: number) => {
+  const confirmar = window.confirm("¿Seguro que quieres activar este reloj?");
+
+  if (!confirmar) return;
+
+  timecoreApi
+    .activarDevice(id)
+    .then(() => {
+      cargarRelojes();
+    })
+    .catch((err) => {
+      console.error("Error activando reloj:", err);
+    });
+};
+
   const sincronizarReloj = (id: number) => {
     timecoreApi
       .sincronizarDevice(id)
@@ -175,7 +191,19 @@ function RelojesPage() {
       });
   };
 
-  const conectados = relojes.filter((r) => r.estado === "Conectado").length;
+const totalRelojes = relojes.length;
+
+const inactivos = relojes.filter(
+  (r) => !r.activo
+).length;
+
+const conectados = relojes.filter(
+  (r) => r.activo && r.estado === "Conectado"
+).length;
+
+const desconectados = relojes.filter(
+  (r) => r.activo && r.estado !== "Conectado"
+).length;
 
   return (
     <AppShell
@@ -185,11 +213,13 @@ function RelojesPage() {
           ? "Cargando relojes registrados..."
           : `${conectados} de ${relojes.length} relojes conectados`
       }
-    >
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <StatCard label="Total de relojes" value={relojes.length} accent="bg-primary/10 text-primary" icon={Plug} />
+      
+    >      
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+        <StatCard label="Total de relojes" value={totalRelojes} accent="bg-primary/10 text-primary" icon={Plug} />
         <StatCard label="Conectados" value={conectados} accent="bg-success/10 text-success" icon={Wifi} />
-        <StatCard label="Desconectados" value={relojes.length - conectados} accent="bg-destructive/10 text-destructive" icon={WifiOff} />
+        <StatCard label="Desconectados" value={desconectados} accent="bg-destructive/10 text-destructive" icon={WifiOff} />
+        <StatCard label="Inactivos" value={inactivos} accent="bg-muted/10 text-muted-foreground" icon={Wifi} />
       </div>
 
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
@@ -259,13 +289,27 @@ function RelojesPage() {
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button
-                        onClick={() => sincronizarReloj(r.id)}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        Sync
-                      </button>
+  onClick={() => {
+    setSyncingId(r.id);
 
+    timecoreApi
+      .sincronizarDevice(r.id)
+      .then(() => {
+        cargarRelojes();
+      })
+      .finally(() => {
+        setSyncingId(null);
+      });
+  }}
+  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary-hover"
+>
+  <RefreshCw
+    className={`h-3.5 w-3.5 ${
+      syncingId === r.id ? "animate-spin" : ""
+    }`}
+  />
+  {syncingId === r.id ? "Conectando..." : "Conectar"}
+</button>
                       <button
                         onClick={() => openEdit(r)}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -274,17 +318,28 @@ function RelojesPage() {
                         <Pencil className="h-4 w-4" />
                       </button>
 
-                      <button
-                        onClick={() => eliminarReloj(r.id)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {r.activo ? (
+  <button
+    onClick={() => eliminarReloj(r.id)}
+    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+    title="Desactivar"
+  >
+    <Plug className="h-4 w-4" />
+  </button>
+) : (
+  <button
+    onClick={() => activarReloj(r.id)}
+    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-success/10 hover:text-success"
+    title="Activar"
+  >
+    <Plug className="h-4 w-4" />
+  </button>
+)}
                     </div>
                   </td>
                 </tr>
               ))}
+
 
               {relojes.length === 0 && (
                 <tr>
