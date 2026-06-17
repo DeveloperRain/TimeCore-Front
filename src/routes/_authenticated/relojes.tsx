@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useEffect, useState } from "react";
 import { timecoreApi } from "@/lib/api/timecore";
+import { useSucursales } from "@/lib/sucursales-store";
 import {
   Plug,
   RefreshCw,
@@ -40,6 +41,7 @@ export const Route = createFileRoute("/_authenticated/relojes")({
 });
 
 function RelojesPage() {
+  const { sucursales } = useSucursales();
   const [relojes, setRelojes] = useState<RelojFront[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -100,7 +102,7 @@ function RelojesPage() {
       nombre: "",
       ip: "",
       puerto: 4370,
-      sucursal: "",
+      sucursal: sucursales[0]?.nombre ?? "Matriz",
       ubicacion: "",
       activo: true,
     });
@@ -317,7 +319,20 @@ function RelojesPage() {
                 <Field label="Nombre" value={form.nombre} onChange={(v) => setForm({ ...form, nombre: v })} placeholder="Reloj Principal" />
                 <Field label="IP" value={form.ip} onChange={(v) => setForm({ ...form, ip: v })} placeholder="192.168.1.50" />
                 <Field label="Puerto" value={String(form.puerto)} onChange={(v) => setForm({ ...form, puerto: Number(v) })} placeholder="4370" />
-                <Field label="Sucursal" value={form.sucursal} onChange={(v) => setForm({ ...form, sucursal: v })} placeholder="Matriz" />
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Sucursal</label>
+                  <select
+                    value={form.sucursal}
+                    onChange={(e) => setForm({ ...form, sucursal: e.target.value })}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    {sucursales.map((s) => (
+                      <option key={s.id} value={s.nombre}>
+                        {s.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <Field label="Ubicación" value={form.ubicacion} onChange={(v) => setForm({ ...form, ubicacion: v })} placeholder="Área de sistemas" className="sm:col-span-2" />
               </div>
 
