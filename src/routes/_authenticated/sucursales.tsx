@@ -1,8 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { useState } from "react";
-import { Building2, MapPin, Plus, Trash2, X } from "lucide-react";
-import { useSucursales } from "@/lib/sucursales-store";
+import { useEffect, useState } from "react";
+import {
+  Building2,
+  MapPin,
+  Plus,
+  Trash2,
+  X,
+  ChevronDown,
+  Pencil,
+  Users,
+  Fingerprint,
+  Check,
+} from "lucide-react";
+import { useSucursales, type Sucursal } from "@/lib/sucursales-store";
+import { timecoreApi } from "@/lib/api/timecore";
 
 export const Route = createFileRoute("/_authenticated/sucursales")({
   head: () => ({
@@ -11,17 +23,28 @@ export const Route = createFileRoute("/_authenticated/sucursales")({
       {
         name: "description",
         content:
-          "Sucursales registradas en TimeCore. Agrega y administra las sucursales de tu empresa.",
+          "Sucursales registradas en TimeCore. Edita nombre, dirección, estado y consulta empleados y relojes.",
       },
     ],
   }),
   component: SucursalesPage,
 });
 
+type Empleado = { uid?: number; name?: string; sucursal?: string; user_id?: string };
+type Reloj = { id: number; nombre?: string; name?: string; sucursal?: string; location?: string };
+
 function SucursalesPage() {
-  const { sucursales, agregar, eliminar } = useSucursales();
+  const { sucursales, agregar, actualizar, eliminar } = useSucursales();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ nombre: "", direccion: "" });
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [relojes, setRelojes] = useState<Reloj[]>([]);
+
+  useEffect(() => {
+    timecoreApi.getUsuarios().then((r) => setEmpleados(r.data ?? r ?? [])).catch(() => setEmpleados([]));
+    timecoreApi.getDevices().then((r) => setRelojes(r.data ?? r ?? [])).catch(() => setRelojes([]));
+  }, []);
 
   const guardar = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +53,17 @@ function SucursalesPage() {
     setForm({ nombre: "", direccion: "" });
     setOpen(false);
   };
+
+  const empleadosDe = (s: Sucursal) =>
+    empleados.filter(
+      (e) => (e.sucursal ?? "Matriz").toLowerCase() === s.nombre.toLowerCase(),
+    );
+  const relojesDe = (s: Sucursal) =>
+    relojes.filter(
+      (r) =>
+        ((r.sucursal ?? r.location ?? "Matriz") as string).toLowerCase() ===
+        s.nombre.toLowerCase(),
+    );
 
   return (
     <AppShell
@@ -41,7 +75,7 @@ function SucursalesPage() {
           <div>
             <h3 className="font-semibold text-foreground">Sucursales</h3>
             <p className="text-xs text-muted-foreground">
-              Agrega sucursales para asignarlas a los relojes biométricos.
+              Agrega, edita y consulta los empleados y relojes de cada sucursal.
             </p>
           </div>
 
@@ -54,35 +88,24 @@ function SucursalesPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-5">
-          {sucursales.map((s) => (
-            <div key={s.id} className="rounded-xl border border-border bg-background p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Building2 className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-foreground truncate">{s.nombre}</h3>
-                    <p className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5">
-                      <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
-                      <span className="line-clamp-2">{s.direccion}</span>
-                    </p>
-                  </div>
-                </div>
-
-                {s.id !== "matriz" && (
-                  <button
-                    onClick={() => eliminar(s.id)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    title="Eliminar"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="divide-y divide-border">
+          {sucursales.map((s) => {
+            const emps = empleadosDe(s);
+            const rels = relojesDe(s);
+            const isOpen = expanded === s.id;
+            return (
+              <SucursalRow
+                key={s.id}
+                sucursal={s}
+                empleados={emps}
+                relojes={rels}
+                isOpen={isOpen}
+                onToggle={() => setExpanded(isOpen ? null : s.id)}
+                onUpdate={(data) => actualizar(s.id, data)}
+                onDelete={s.id === "matriz" ? undefined : () => eliminar(s.id)}
+              />
+            );
+          })}
         </div>
       </div>
 
@@ -144,5 +167,203 @@ function SucursalesPage() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+function SucursalRow({
+  sucursal,
+  empleados,
+  relojes,
+  isOpen,
+  onToggle,
+  onUpdate,
+  onDelete,
+}: {
+  sucursal: Sucursal;
+  empleados: Empleado[];
+  relojes: Reloj[];
+  isOpen: boolean;
+  onToggle: () => void;
+  onUpdate: (data: Partial<Omit<Sucursal, "id">>) => void;
+  onDelete?: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    nombre: sucursal.nombre,
+    direccion: sucursal.direccion,
+    activo: sucursal.activo,
+  });
+
+  useEffect(() => {
+    setDraft({ nombre: sucursal.nombre, direccion: sucursal.direccion, activo: sucursal.activo });
+  }, [sucursal.nombre, sucursal.direccion, sucursal.activo]);
+
+  const guardar = () => {
+    if (!draft.nombre.trim() || !draft.direccion.trim()) return;
+    onUpdate(draft);
+    setEditing(false);
+  };
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors text-left"
+      >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Building2 className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-foreground truncate">{sucursal.nombre}</h3>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                sucursal.activo
+                  ? "bg-success/10 text-success"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  sucursal.activo ? "bg-success" : "bg-muted-foreground"
+                }`}
+              />
+              {sucursal.activo ? "Activo" : "Inactivo"}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+            <MapPin className="h-3 w-3 shrink-0" />
+            {sucursal.direccion}
+          </p>
+        </div>
+        <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <Users className="h-3.5 w-3.5" />
+            {empleados.length}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Fingerprint className="h-3.5 w-3.5" />
+            {relojes.length}
+          </span>
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="px-5 pb-5 bg-muted/20 border-t border-border">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-5">
+            <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-foreground">Información</h4>
+                {!editing ? (
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <Pencil className="h-3 w-3" /> Editar
+                  </button>
+                ) : (
+                  <button
+                    onClick={guardar}
+                    className="inline-flex items-center gap-1 text-xs text-success hover:underline"
+                  >
+                    <Check className="h-3 w-3" /> Guardar
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+                <input
+                  type="text"
+                  disabled={!editing}
+                  value={draft.nombre}
+                  onChange={(e) => setDraft({ ...draft, nombre: e.target.value })}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Dirección</label>
+                <input
+                  type="text"
+                  disabled={!editing}
+                  value={draft.direccion}
+                  onChange={(e) => setDraft({ ...draft, direccion: e.target.value })}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Estado</label>
+                <select
+                  disabled={!editing}
+                  value={draft.activo ? "activo" : "inactivo"}
+                  onChange={(e) => setDraft({ ...draft, activo: e.target.value === "activo" })}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
+                >
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
+                </select>
+              </div>
+
+              {onDelete && (
+                <div className="pt-2 border-t border-border">
+                  <button
+                    onClick={onDelete}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive hover:underline"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Eliminar sucursal
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border bg-card p-4">
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                  <Users className="h-4 w-4" />
+                  Empleados ({empleados.length})
+                </h4>
+                {empleados.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin empleados asignados.</p>
+                ) : (
+                  <ul className="divide-y divide-border max-h-48 overflow-y-auto">
+                    {empleados.map((e, i) => (
+                      <li key={e.uid ?? i} className="py-2 text-sm text-foreground flex justify-between gap-3">
+                        <span className="truncate">{e.name ?? "Sin nombre"}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{e.user_id ?? "—"}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-4">
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                  <Fingerprint className="h-4 w-4" />
+                  Relojes ({relojes.length})
+                </h4>
+                {relojes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Sin relojes asignados.</p>
+                ) : (
+                  <ul className="divide-y divide-border max-h-48 overflow-y-auto">
+                    {relojes.map((r) => (
+                      <li key={r.id} className="py-2 text-sm text-foreground">
+                        {r.nombre ?? r.name ?? `Reloj #${r.id}`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
