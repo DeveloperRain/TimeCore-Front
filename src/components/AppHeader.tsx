@@ -1,4 +1,4 @@
-import { Bell, LogOut, Search } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,10 +28,6 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
     };
   }, []);
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
-  }
 
   return (
     <header className="border-b border-border bg-card">
@@ -54,13 +50,6 @@ export function AppHeader({ title, subtitle }: { title: string; subtitle?: strin
           <button className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background hover:bg-accent transition-colors">
             <Bell className="h-4 w-4" />
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-          </button>
-          <button
-            onClick={handleSignOut}
-            title="Cerrar sesión"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background hover:bg-accent transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
           </button>
           {user && (
             <div className="hidden sm:flex flex-col items-end mr-1">
