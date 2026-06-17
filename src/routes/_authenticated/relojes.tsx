@@ -102,7 +102,7 @@ function RelojesPage() {
       nombre: "",
       ip: "",
       puerto: 4370,
-      sucursal: "",
+      sucursal: sucursales[0]?.nombre ?? "Matriz",
       ubicacion: "",
       activo: true,
     });
