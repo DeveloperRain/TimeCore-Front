@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Users,
@@ -6,7 +7,9 @@ import {
   Fingerprint,
   Building2,
   Clock,
+  LogOut,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -18,6 +21,12 @@ const items = [
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", replace: true });
+  }
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
@@ -55,15 +64,13 @@ export function AppSidebar() {
       </nav>
 
       <div className="border-t border-sidebar-border px-4 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sidebar-accent text-sm font-semibold">
-            AD
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium truncate">Admin</p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">admin@timecore.com</p>
-          </div>
-        </div>
+        <button
+          onClick={handleSignOut}
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          <LogOut className="h-4 w-4 shrink-0" />
+          <span className="truncate">Cerrar sesión</span>
+        </button>
       </div>
     </aside>
   );
