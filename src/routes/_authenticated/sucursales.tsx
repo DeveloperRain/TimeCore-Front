@@ -5,15 +5,12 @@ import {
   Building2,
   MapPin,
   Plus,
-  Trash2,
   X,
   ChevronDown,
   Pencil,
-  Users,
   Fingerprint,
   Check,
 } from "lucide-react";
-import { useSucursales, type Sucursal } from "@/lib/sucursales-store";
 import { timecoreApi } from "@/lib/api/timecore";
 
 export const Route = createFileRoute("/_authenticated/sucursales")({
@@ -30,39 +27,119 @@ export const Route = createFileRoute("/_authenticated/sucursales")({
   component: SucursalesPage,
 });
 
-type Empleado = { uid?: number; name?: string; sucursal?: string; user_id?: string };
-type Reloj = { id: number; nombre?: string; name?: string; sucursal?: string; location?: string };
+type Sucursal = {
+  id: number;
+  nombre: string;
+  direccion: string;
+  activo: boolean;
+};
+
+type Empleado = {
+  uid?: number;
+  name?: string;
+  sucursal?: string;
+  user_id?: string;
+};
+
+type Reloj = {
+  id: number;
+  nombre?: string;
+  name?: string;
+  sucursal?: string;
+  location?: string;
+};
 
 function SucursalesPage() {
-  const { sucursales, agregar, actualizar, eliminar } = useSucursales();
+  const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ nombre: "", direccion: "" });
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [relojes, setRelojes] = useState<Reloj[]>([]);
 
   useEffect(() => {
-    timecoreApi.getUsuarios().then((r) => setEmpleados(r.data ?? r ?? [])).catch(() => setEmpleados([]));
-    timecoreApi.getDevices().then((r) => setRelojes(r.data ?? r ?? [])).catch(() => setRelojes([]));
+    cargarSucursales();
+    cargarDatosRelacionados();
   }, []);
+
+  const cargarSucursales = () => {
+    timecoreApi
+      .getBranches()
+      .then((res) => {
+        const data = res.data ?? [];
+
+        const branches: Sucursal[] = data.map((b: any) => ({
+          id: Number(b.id),
+          nombre: String(b.name ?? ""),
+          direccion: String(b.address ?? ""),
+          activo: Boolean(b.is_active),
+        }));
+
+        setSucursales(branches);
+      })
+      .catch((err) => {
+        console.error("Error cargando sucursales:", err);
+        setSucursales([]);
+      });
+  };
+
+  const cargarDatosRelacionados = () => {
+    timecoreApi
+      .getUsuarios()
+      .then((r) => setEmpleados(r.data ?? r ?? []))
+      .catch(() => setEmpleados([]));
+
+    timecoreApi
+      .getDevices()
+      .then((r) => setRelojes(r.data ?? r ?? []))
+      .catch(() => setRelojes([]));
+  };
 
   const guardar = (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!form.nombre.trim() || !form.direccion.trim()) return;
-    agregar(form.nombre, form.direccion);
-    setForm({ nombre: "", direccion: "" });
-    setOpen(false);
+
+    timecoreApi
+      .crearBranch({
+        name: form.nombre.trim(),
+        address: form.direccion.trim(),
+      })
+      .then(() => {
+        setForm({ nombre: "", direccion: "" });
+        setOpen(false);
+        cargarSucursales();
+      })
+      .catch((err) => {
+        console.error("Error creando sucursal:", err);
+      });
+  };
+
+  const actualizarSucursal = (
+    id: number,
+    data: { nombre: string; direccion: string; activo: boolean }
+  ) => {
+    return timecoreApi
+      .actualizarBranch(id, {
+        name: data.nombre,
+        address: data.direccion,
+        is_active: data.activo,
+      })
+      .then(() => {
+        cargarSucursales();
+      });
   };
 
   const empleadosDe = (s: Sucursal) =>
     empleados.filter(
-      (e) => (e.sucursal ?? "Matriz").toLowerCase() === s.nombre.toLowerCase(),
+      (e) => (e.sucursal ?? "Sin sucursal").toLowerCase() === s.nombre.toLowerCase()
     );
+
   const relojesDe = (s: Sucursal) =>
     relojes.filter(
       (r) =>
-        ((r.sucursal ?? r.location ?? "Matriz") as string).toLowerCase() ===
-        s.nombre.toLowerCase(),
+        String(r.sucursal ?? r.location ?? "Sin sucursal").toLowerCase() ===
+        s.nombre.toLowerCase()
     );
 
   return (
@@ -93,6 +170,7 @@ function SucursalesPage() {
             const emps = empleadosDe(s);
             const rels = relojesDe(s);
             const isOpen = expanded === s.id;
+
             return (
               <SucursalRow
                 key={s.id}
@@ -101,11 +179,16 @@ function SucursalesPage() {
                 relojes={rels}
                 isOpen={isOpen}
                 onToggle={() => setExpanded(isOpen ? null : s.id)}
-                onUpdate={(data) => actualizar(s.id, data)}
-                onDelete={s.id === "matriz" ? undefined : () => eliminar(s.id)}
+                onUpdate={(data) => actualizarSucursal(s.id, data)}
               />
             );
           })}
+
+          {sucursales.length === 0 && (
+            <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+              No hay sucursales registradas.
+            </div>
+          )}
         </div>
       </div>
 
@@ -113,7 +196,10 @@ function SucursalesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-xl bg-card border border-border shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h3 className="text-lg font-semibold text-foreground">Nueva sucursal</h3>
+              <h3 className="text-lg font-semibold text-foreground">
+                Nueva sucursal
+              </h3>
+
               <button
                 onClick={() => setOpen(false)}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
@@ -124,24 +210,30 @@ function SucursalesPage() {
 
             <form onSubmit={guardar} className="p-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Nombre</label>
+                <label className="text-sm font-medium text-foreground">
+                  Nombre
+                </label>
                 <input
                   type="text"
                   value={form.nombre}
                   onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                  placeholder="Sucursal Norte"
+                  placeholder="Matriz"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   required
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Dirección</label>
+                <label className="text-sm font-medium text-foreground">
+                  Dirección
+                </label>
                 <input
                   type="text"
                   value={form.direccion}
-                  onChange={(e) => setForm({ ...form, direccion: e.target.value })}
-                  placeholder="Av. Reforma 123, CDMX"
+                  onChange={(e) =>
+                    setForm({ ...form, direccion: e.target.value })
+                  }
+                  placeholder="Dirección de la sucursal"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   required
                 />
@@ -155,6 +247,7 @@ function SucursalesPage() {
                 >
                   Cancelar
                 </button>
+
                 <button
                   type="submit"
                   className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-hover"
@@ -177,15 +270,13 @@ function SucursalRow({
   isOpen,
   onToggle,
   onUpdate,
-  onDelete,
 }: {
   sucursal: Sucursal;
   empleados: Empleado[];
   relojes: Reloj[];
   isOpen: boolean;
   onToggle: () => void;
-  onUpdate: (data: Partial<Omit<Sucursal, "id">>) => void;
-  onDelete?: () => void;
+  onUpdate: (data: { nombre: string; direccion: string; activo: boolean }) => Promise<any>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({
@@ -195,13 +286,23 @@ function SucursalRow({
   });
 
   useEffect(() => {
-    setDraft({ nombre: sucursal.nombre, direccion: sucursal.direccion, activo: sucursal.activo });
+    setDraft({
+      nombre: sucursal.nombre,
+      direccion: sucursal.direccion,
+      activo: sucursal.activo,
+    });
   }, [sucursal.nombre, sucursal.direccion, sucursal.activo]);
 
   const guardar = () => {
     if (!draft.nombre.trim() || !draft.direccion.trim()) return;
-    onUpdate(draft);
-    setEditing(false);
+
+    onUpdate(draft)
+      .then(() => {
+        setEditing(false);
+      })
+      .catch((err) => {
+        console.error("Error actualizando sucursal:", err);
+      });
   };
 
   return (
@@ -214,9 +315,13 @@ function SucursalRow({
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Building2 className="h-5 w-5" />
         </div>
+
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-foreground truncate">{sucursal.nombre}</h3>
+            <h3 className="font-semibold text-foreground truncate">
+              {sucursal.nombre}
+            </h3>
+
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                 sucursal.activo
@@ -232,23 +337,24 @@ function SucursalRow({
               {sucursal.activo ? "Activo" : "Inactivo"}
             </span>
           </div>
+
           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
             <MapPin className="h-3 w-3 shrink-0" />
             {sucursal.direccion}
           </p>
         </div>
+
         <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <Users className="h-3.5 w-3.5" />
-            {empleados.length}
-          </span>
           <span className="inline-flex items-center gap-1">
             <Fingerprint className="h-3.5 w-3.5" />
             {relojes.length}
           </span>
         </div>
+
         <ChevronDown
-          className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
+          className={`h-4 w-4 text-muted-foreground transition-transform ${
+            isOpen ? "rotate-180" : ""
+          }`}
         />
       </button>
 
@@ -257,7 +363,10 @@ function SucursalRow({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-5">
             <div className="rounded-lg border border-border bg-card p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-foreground">Información</h4>
+                <h4 className="text-sm font-semibold text-foreground">
+                  Información
+                </h4>
+
                 {!editing ? (
                   <button
                     onClick={() => setEditing(true)}
@@ -276,81 +385,68 @@ function SucursalRow({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Nombre</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Nombre
+                </label>
                 <input
                   type="text"
                   disabled={!editing}
                   value={draft.nombre}
-                  onChange={(e) => setDraft({ ...draft, nombre: e.target.value })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, nombre: e.target.value })
+                  }
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Dirección</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Dirección
+                </label>
                 <input
                   type="text"
                   disabled={!editing}
                   value={draft.direccion}
-                  onChange={(e) => setDraft({ ...draft, direccion: e.target.value })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, direccion: e.target.value })
+                  }
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Estado</label>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Estado
+                </label>
                 <select
                   disabled={!editing}
                   value={draft.activo ? "activo" : "inactivo"}
-                  onChange={(e) => setDraft({ ...draft, activo: e.target.value === "activo" })}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      activo: e.target.value === "activo",
+                    })
+                  }
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
                 >
                   <option value="activo">Activo</option>
                   <option value="inactivo">Inactivo</option>
                 </select>
               </div>
-
-              {onDelete && (
-                <div className="pt-2 border-t border-border">
-                  <button
-                    onClick={onDelete}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive hover:underline"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Eliminar sucursal
-                  </button>
-                </div>
-              )}
             </div>
 
             {!editing && (
               <div className="space-y-4">
                 <div className="rounded-lg border border-border bg-card p-4">
                   <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
-                    <Users className="h-4 w-4" />
-                    Empleados ({empleados.length})
-                  </h4>
-                  {empleados.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Sin empleados asignados.</p>
-                  ) : (
-                    <ul className="divide-y divide-border max-h-48 overflow-y-auto">
-                      {empleados.map((e, i) => (
-                        <li key={e.uid ?? i} className="py-2 text-sm text-foreground flex justify-between gap-3">
-                          <span className="truncate">{e.name ?? "Sin nombre"}</span>
-                          <span className="text-xs text-muted-foreground font-mono">{e.user_id ?? "—"}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-border bg-card p-4">
-                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
                     <Fingerprint className="h-4 w-4" />
                     Relojes ({relojes.length})
                   </h4>
+
                   {relojes.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Sin relojes asignados.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Sin relojes asignados.
+                    </p>
                   ) : (
                     <ul className="divide-y divide-border max-h-48 overflow-y-auto">
                       {relojes.map((r) => (

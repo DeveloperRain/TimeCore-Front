@@ -58,6 +58,24 @@
     getDispositivo: () => request("/device/info"),
     getDevices: () => request("/db/devices"),
 
+
+  getBranches: () => request("/branches/"),
+
+    crearBranch: (data: { name: string; address?: string }) =>
+    request("/branches/", {
+    method: "POST",
+    body: JSON.stringify(data),
+  }),
+
+  actualizarBranch: (
+  id: number,
+  data: { name?: string; address?: string; is_active?: boolean }
+  ) =>
+    request(`/branches/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
   crearDevice: (data: {
     nombre: string;
     ip: string;
@@ -141,5 +159,6 @@
     return `${API_URL}/db/attendance/report/download?start_date=${startDate}&end_date=${endDate}`;
   }
 
+  
   
 

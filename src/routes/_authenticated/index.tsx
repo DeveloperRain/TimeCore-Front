@@ -245,7 +245,6 @@ function Dashboard() {
             ))}
           </div>
         </div>
-
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <h3 className="text-base font-semibold text-foreground">Empleados por sucursal</h3>
           <p className="text-xs text-muted-foreground mb-5">Distribución actual</p>
@@ -305,3 +304,4 @@ function Dashboard() {
     </AppShell>
   );
 }
+                                        
