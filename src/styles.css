@@ -61,10 +61,10 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.04 250);
 
-  /* Corporate navy */
-  --primary: oklch(0.32 0.09 254);
-  --primary-foreground: oklch(0.99 0.005 240);
-  --primary-hover: oklch(0.28 0.1 254);
+  /* Corporate emerald */
+  --primary: oklch(0.35 0.12 160);
+  --primary-foreground: oklch(0.99 0.005 160);
+  --primary-hover: oklch(0.30 0.11 160);
 
   --secondary: oklch(0.96 0.01 240);
   --secondary-foreground: oklch(0.32 0.09 254);
