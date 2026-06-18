@@ -323,44 +323,46 @@ function SucursalRow({
               )}
             </div>
 
-            <div className="space-y-4">
-              <div className="rounded-lg border border-border bg-card p-4">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
-                  <Users className="h-4 w-4" />
-                  Empleados ({empleados.length})
-                </h4>
-                {empleados.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Sin empleados asignados.</p>
-                ) : (
-                  <ul className="divide-y divide-border max-h-48 overflow-y-auto">
-                    {empleados.map((e, i) => (
-                      <li key={e.uid ?? i} className="py-2 text-sm text-foreground flex justify-between gap-3">
-                        <span className="truncate">{e.name ?? "Sin nombre"}</span>
-                        <span className="text-xs text-muted-foreground font-mono">{e.user_id ?? "—"}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+            {!editing && (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                    <Users className="h-4 w-4" />
+                    Empleados ({empleados.length})
+                  </h4>
+                  {empleados.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Sin empleados asignados.</p>
+                  ) : (
+                    <ul className="divide-y divide-border max-h-48 overflow-y-auto">
+                      {empleados.map((e, i) => (
+                        <li key={e.uid ?? i} className="py-2 text-sm text-foreground flex justify-between gap-3">
+                          <span className="truncate">{e.name ?? "Sin nombre"}</span>
+                          <span className="text-xs text-muted-foreground font-mono">{e.user_id ?? "—"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
 
-              <div className="rounded-lg border border-border bg-card p-4">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
-                  <Fingerprint className="h-4 w-4" />
-                  Relojes ({relojes.length})
-                </h4>
-                {relojes.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Sin relojes asignados.</p>
-                ) : (
-                  <ul className="divide-y divide-border max-h-48 overflow-y-auto">
-                    {relojes.map((r) => (
-                      <li key={r.id} className="py-2 text-sm text-foreground">
-                        {r.nombre ?? r.name ?? `Reloj #${r.id}`}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-3">
+                    <Fingerprint className="h-4 w-4" />
+                    Relojes ({relojes.length})
+                  </h4>
+                  {relojes.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Sin relojes asignados.</p>
+                  ) : (
+                    <ul className="divide-y divide-border max-h-48 overflow-y-auto">
+                      {relojes.map((r) => (
+                        <li key={r.id} className="py-2 text-sm text-foreground">
+                          {r.nombre ?? r.name ?? `Reloj #${r.id}`}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
