@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useEffect, useState } from "react";
-import { sucursalesNombres, type Empleado } from "@/lib/mock-data";
 import { timecoreApi } from "@/lib/api/timecore";
 import { Search, Plus, Pencil, X } from "lucide-react";
 
@@ -20,7 +19,13 @@ export const Route = createFileRoute("/_authenticated/empleados")({
 
 type EstadoEmpleado = "Activo" | "Inactivo" | "Baja";
 
-type EmpleadoFront = Omit<Empleado, "estado"> & {
+type EmpleadoFront = {
+  id: number;
+  codigo: string;
+  nombre: string;
+  puesto: string;
+  sucursal: string;
+  email: string;
   estado: EstadoEmpleado;
 };
 
@@ -28,16 +33,44 @@ function EmpleadosPage() {
   const [query, setQuery] = useState("");
   const [filterSucursal, setFilterSucursal] = useState("");
   const [filterEstado, setFilterEstado] = useState("");
+  const [sucursales, setSucursales] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<EmpleadoFront | null>(null);
-
   const [empleados, setEmpleados] = useState<EmpleadoFront[]>([]);
   const [loading, setLoading] = useState(true);
-  const [estadoEdit, setEstadoEdit] = useState<EstadoEmpleado>("Activo");
+
+  const [form, setForm] = useState({
+    uid: "",
+    codigo: "",
+    nombre: "",
+    puesto: "usuario",
+    sucursal: "",
+    email: "",
+    estado: "Activo" as EstadoEmpleado,
+  });
 
   useEffect(() => {
     cargarEmpleados();
+    cargarSucursales();
   }, []);
+
+  const cargarSucursales = () => {
+    timecoreApi
+      .getBranches()
+      .then((res) => {
+        const data = res.data ?? [];
+        const nombres: string[] = data
+          .filter((b: any) => b.is_active)
+          .map((b: any) => String(b.name))
+          .filter((name: string) => name.trim() !== "");
+
+        setSucursales(nombres);
+      })
+      .catch((err) => {
+        console.error("Error cargando sucursales:", err);
+        setSucursales([]);
+      });
+  };
 
   const cargarEmpleados = () => {
     setLoading(true);
@@ -51,9 +84,9 @@ function EmpleadosPage() {
           id: u.uid,
           codigo: String(u.user_id ?? u.uid ?? ""),
           nombre: String(u.name ?? "Sin nombre"),
-          puesto: String(u.role ?? "Empleado"),
-          sucursal: "Reloj Principal",
-          email: "Sin correo",
+          puesto: String(u.role ?? "usuario"),
+          sucursal: String(u.sucursal ?? "Sin sucursal"),
+          email: String(u.email ?? "Sin correo"),
           estado: String(u.status ?? "Activo") as EstadoEmpleado,
         }));
 
@@ -66,57 +99,99 @@ function EmpleadosPage() {
       .finally(() => setLoading(false));
   };
 
+  const openAdd = () => {
+    setEditing(null);
+    setForm({
+      uid: "",
+      codigo: "",
+      nombre: "",
+      puesto: "usuario",
+      sucursal: sucursales[0] ?? "",
+      email: "",
+      estado: "Activo",
+    });
+    setOpen(true);
+  };
+
+  const openEdit = (e: EmpleadoFront) => {
+    setEditing(e);
+    setForm({
+      uid: String(e.id),
+      codigo: e.codigo,
+      nombre: e.nombre,
+      puesto: e.puesto,
+      sucursal: e.sucursal,
+      email: e.email,
+      estado: e.estado,
+    });
+    setOpen(true);
+  };
+
+  const guardarEmpleado = () => {
+    if (!form.uid.trim() || !form.codigo.trim() || !form.nombre.trim()) {
+      alert("UID, Código y Nombre son obligatorios");
+      return;
+    }
+
+    if (!editing) {
+      timecoreApi
+        .crearUsuario({
+          uid: Number(form.uid),
+          user_id: form.codigo,
+          name: form.nombre,
+          role: form.puesto,
+        })
+        .then(() => {
+          if (form.estado !== "Activo") {
+            return timecoreApi.actualizarEstadoEmpleado(
+              Number(form.uid),
+              form.estado
+            );
+          }
+        })
+        .then(() => {
+          cargarEmpleados();
+          setOpen(false);
+        })
+        .catch((err) => {
+          console.error("Error creando empleado:", err);
+          alert("No se pudo crear el empleado");
+        });
+
+      return;
+    }
+
+    timecoreApi
+      .actualizarUsuario(editing.id, {
+        user_id: form.codigo,
+        name: form.nombre,
+        role: form.puesto,
+      })
+      .then(() => timecoreApi.actualizarEstadoEmpleado(editing.id, form.estado))
+      .then(() => {
+        cargarEmpleados();
+        setOpen(false);
+      })
+      .catch((err) => {
+        console.error("Error actualizando empleado:", err);
+        alert("No se pudo actualizar el empleado");
+      });
+  };
+
   const filtered = empleados.filter((e) => {
     const matchQ =
       !query ||
       e.nombre.toLowerCase().includes(query.toLowerCase()) ||
       e.codigo.toLowerCase().includes(query.toLowerCase()) ||
-      e.email.toLowerCase().includes(query.toLowerCase());
+      e.email.toLowerCase().includes(query.toLowerCase()) ||
+      e.puesto.toLowerCase().includes(query.toLowerCase()) ||
+      e.sucursal.toLowerCase().includes(query.toLowerCase());
 
     const matchS = !filterSucursal || e.sucursal === filterSucursal;
     const matchE = !filterEstado || e.estado === filterEstado;
 
     return matchQ && matchS && matchE;
   });
-
-  const openAdd = () => {
-  setEditing(null);
-  setEstadoEdit("Activo");
-  setOpen(true);
-};
-
-  const openEdit = (e: EmpleadoFront) => {
-  setEditing(e);
-  setEstadoEdit(e.estado);
-  setOpen(true);
-};
-
-  const guardarEstadoEmpleado = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    if (!editing) {
-      setOpen(false);
-      return;
-    }
-
-    const formData = new FormData(e.currentTarget);
-    const estado = String(formData.get("estado")) as EstadoEmpleado;
-
-    timecoreApi
-      .actualizarEstadoEmpleado(editing.id, estado)
-      .then(() => {
-        setEmpleados((prev) =>
-          prev.map((emp) =>
-            emp.id === editing.id ? { ...emp, estado } : emp
-          )
-        );
-
-        setOpen(false);
-      })
-      .catch((err) => {
-        console.error("Error actualizando estado:", err);
-      });
-  };
 
   return (
     <AppShell
@@ -135,7 +210,7 @@ function EmpleadosPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por nombre, código o email..."
+              placeholder="Buscar por nombre, puesto, sucursal o email..."
               className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
             />
           </div>
@@ -147,7 +222,7 @@ function EmpleadosPage() {
               className="rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               <option value="">Todas las sucursales</option>
-              {sucursalesNombres.map((s) => (
+              {sucursales.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -155,14 +230,15 @@ function EmpleadosPage() {
             </select>
 
             <select
-  value={estadoEdit}
-  onChange={(e) => setEstadoEdit(e.target.value as EstadoEmpleado)}
-  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
->
-  <option value="Activo">Activo</option>
-  <option value="Inactivo">Inactivo</option>
-  <option value="Baja">Baja</option>
-</select>
+              value={filterEstado}
+              onChange={(e) => setFilterEstado(e.target.value)}
+              className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="">Todos los estados</option>
+              <option value="Activo">Activo</option>
+              <option value="Inactivo">Inactivo</option>
+              <option value="Baja">Baja</option>
+            </select>
 
             <button
               onClick={openAdd}
@@ -200,15 +276,14 @@ function EmpleadosPage() {
                   <td className="px-5 py-3 text-foreground">{e.puesto}</td>
                   <td className="px-5 py-3 text-foreground">{e.sucursal}</td>
                   <td className="px-5 py-3 text-muted-foreground">{e.email}</td>
-
                   <td className="px-5 py-3">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
                         e.estado === "Activo"
                           ? "bg-success/10 text-success"
                           : e.estado === "Inactivo"
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-destructive/10 text-destructive"
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-muted text-muted-foreground"
                       }`}
                     >
                       <span
@@ -216,8 +291,8 @@ function EmpleadosPage() {
                           e.estado === "Activo"
                             ? "bg-success"
                             : e.estado === "Inactivo"
-                            ? "bg-muted-foreground"
-                            : "bg-destructive"
+                              ? "bg-destructive"
+                              : "bg-muted-foreground"
                         }`}
                       />
                       {e.estado}
@@ -271,22 +346,35 @@ function EmpleadosPage() {
               </button>
             </div>
 
-            <form onSubmit={guardarEstadoEmpleado} className="p-5 space-y-4">
+            <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field
-                  label="Código"
-                  defaultValue={editing?.codigo}
-                  placeholder="EMP-009"
+                  label="UID"
+                  value={form.uid}
+                  disabled={!!editing}
+                  onChange={(v) => setForm({ ...form, uid: v })}
+                  placeholder="Ej. 23"
                 />
+
+                <Field
+                  label="Código"
+                  value={form.codigo}
+                  onChange={(v) => setForm({ ...form, codigo: v })}
+                  placeholder="Ej. 23"
+                />
+
                 <Field
                   label="Nombre completo"
-                  defaultValue={editing?.nombre}
-                  placeholder="Nombre Apellido"
+                  value={form.nombre}
+                  onChange={(v) => setForm({ ...form, nombre: v })}
+                  placeholder="Nombre del empleado"
                 />
+
                 <Field
                   label="Puesto"
-                  defaultValue={editing?.puesto}
-                  placeholder="Ej. Gerente"
+                  value={form.puesto}
+                  onChange={(v) => setForm({ ...form, puesto: v })}
+                  placeholder="usuario"
                 />
 
                 <div className="space-y-1.5">
@@ -294,11 +382,14 @@ function EmpleadosPage() {
                     Sucursal
                   </label>
                   <select
-                    defaultValue={editing?.sucursal ?? ""}
+                    value={form.sucursal}
+                    onChange={(e) =>
+                      setForm({ ...form, sucursal: e.target.value })
+                    }
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">Seleccionar...</option>
-                    {sucursalesNombres.map((s) => (
+                    {sucursales.map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
@@ -308,9 +399,9 @@ function EmpleadosPage() {
 
                 <Field
                   label="Email"
-                  defaultValue={editing?.email}
-                  placeholder="correo@empresa.com"
-                  className="sm:col-span-2"
+                  value={form.email}
+                  onChange={(v) => setForm({ ...form, email: v })}
+                  placeholder="Sin correo"
                 />
 
                 <div className="space-y-1.5 sm:col-span-2">
@@ -318,8 +409,13 @@ function EmpleadosPage() {
                     Estado
                   </label>
                   <select
-                    name="estado"
-                    defaultValue={editing?.estado ?? "Activo"}
+                    value={form.estado}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        estado: e.target.value as EstadoEmpleado,
+                      })
+                    }
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="Activo">Activo</option>
@@ -339,36 +435,14 @@ function EmpleadosPage() {
                 </button>
 
                 <button
-              type="button"
-              onClick={() => {
-    if (!editing) {
-      setOpen(false);
-      return;
-    }
-
-    console.log("Guardando estado:", editing.id, estadoEdit);
-
-    timecoreApi
-      .actualizarEstadoEmpleado(editing.id, estadoEdit)
-      .then(() => {
-        setEmpleados((prev) =>
-          prev.map((emp) =>
-            emp.id === editing.id ? { ...emp, estado: estadoEdit } : emp
-          )
-        );
-
-        setOpen(false);
-      })
-      .catch((err) => {
-        console.error("Error actualizando estado:", err);
-      });
-  }}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-hover"
-                  >
-                    Guardar cambios
-                        </button>
+                  type="button"
+                  onClick={guardarEmpleado}
+                  className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-hover"
+                >
+                  {editing ? "Guardar cambios" : "Crear empleado"}
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
@@ -378,23 +452,29 @@ function EmpleadosPage() {
 
 function Field({
   label,
-  defaultValue,
+  value,
+  onChange,
   placeholder,
   className = "",
+  disabled = false,
 }: {
   label: string;
-  defaultValue?: string;
+  value: string;
+  onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className={`space-y-1.5 ${className}`}>
       <label className="text-sm font-medium text-foreground">{label}</label>
       <input
         type="text"
-        defaultValue={defaultValue}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
       />
     </div>
   );

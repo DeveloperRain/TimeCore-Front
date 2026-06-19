@@ -47,7 +47,9 @@ type BarItem = {
 function Dashboard() {
   const [totalUsuarios, setTotalUsuarios] = useState(0);
   const [totalAsistencias, setTotalAsistencias] = useState(0);
-  const [relojConectado, setRelojConectado] = useState(false);
+  const [relojesConectados, setRelojesConectados] = useState(0);
+  const [totalRelojes, setTotalRelojes] = useState(0);
+  const [sucursalesActivas, setSucursalesActivas] = useState(0);
   const [actividad, setActividad] = useState<ActividadItem[]>([]);
   const [barData, setBarData] = useState<BarItem[]>([
     { day: "Lun", value: 0 },
@@ -60,24 +62,25 @@ function Dashboard() {
   ]);
 
   useEffect(() => {
-    // Obtener resumen del dashboard
-    timecoreApi.getDashboardSummary()
-  .then((res) => {
-    const data = res.data ?? {};
+    timecoreApi
+      .getDashboardSummary()
+      .then((res) => {
+        const data = res.data ?? {};
 
-    setTotalUsuarios(data.total_users ?? 0);
-    setTotalAsistencias(data.total_attendance ?? 0);
-    setRelojConectado((data.connected_devices ?? 0) > 0);
-  })
-  .catch((err) => {
-    console.error("Error obteniendo resumen:", err);
-    setRelojConectado(false);
-  });
+        setTotalUsuarios(data.total_empleados ?? 0);
+        setTotalAsistencias(data.asistencias_registradas ?? 0);
+        setRelojesConectados(data.relojes_conectados ?? 0);
+        setTotalRelojes(data.total_relojes ?? 0);
+        setSucursalesActivas(data.sucursales_activas ?? 0);
+      })
+      .catch((err) => {
+        console.error("Error obteniendo resumen:", err);
+      });
 
-    timecoreApi.getAsistencias()
+    timecoreApi
+      .getAsistencias()
       .then((res) => {
         const registros = res.data ?? [];
-        setTotalAsistencias(registros.length);
 
         const ultimas: ActividadItem[] = registros.slice(0, 8).map((a: any) => {
           const rawDate = String(a.timestamp ?? a.punch_time ?? a.time ?? "");
@@ -86,10 +89,11 @@ function Dashboard() {
             : rawDate.split(" ")[1]?.slice(0, 5);
 
           const codigo = String(a.user_id ?? a.uid ?? "Sin código");
+          const nombre = String(a.name ?? a.user_name ?? `Usuario ${codigo}`);
 
           return {
             hora: hora || "--:--",
-            texto: `Usuario ${codigo} registró asistencia en Reloj Principal`,
+            texto: `${nombre} registró asistencia`,
             tipo: "in",
           };
         });
@@ -151,18 +155,19 @@ function Dashboard() {
     {
       label: "Total de empleados",
       value: String(totalUsuarios),
-      delta: "Desde reloj biométrico",
+      delta: "Desde PostgreSQL",
       icon: Users,
       accent: "bg-primary/10 text-primary",
     },
     {
       label: "Relojes conectados",
-      value: relojConectado ? "1 / 1" : "0 / 1",
-      delta: relojConectado ? "Conexión activa" : "Sin conexión",
+      value: `${relojesConectados} / ${totalRelojes}`,
+      delta: relojesConectados > 0 ? "Conexión activa" : "Sin conexión",
       icon: Fingerprint,
-      accent: relojConectado
-        ? "bg-success/10 text-success"
-        : "bg-destructive/10 text-destructive",
+      accent:
+        relojesConectados > 0
+          ? "bg-success/10 text-success"
+          : "bg-destructive/10 text-destructive",
     },
     {
       label: "Asistencias registradas",
@@ -173,8 +178,8 @@ function Dashboard() {
     },
     {
       label: "Sucursales activas",
-      value: relojConectado ? "1" : "0",
-      delta: "Reloj Principal",
+      value: String(sucursalesActivas),
+      delta: "Desde PostgreSQL",
       icon: Building2,
       accent: "bg-warning/20 text-warning-foreground",
     },
@@ -182,34 +187,31 @@ function Dashboard() {
 
   const maxBar = Math.max(...barData.map((d) => d.value), 1);
 
-  const distribucion = [
-    {
-      label: "Reloj Principal",
-      value: totalUsuarios,
-      color: "bg-primary",
-    },
-  ];
-
-  const totalDist = Math.max(
-    distribucion.reduce((s, d) => s + d.value, 0),
-    1
-  );
-
   return (
     <AppShell title="Dashboard" subtitle="Resumen general del sistema">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         {kpis.map((k) => (
-          <div key={k.label} className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <div
+            key={k.label}
+            className="rounded-xl border border-border bg-card p-5 shadow-sm"
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm text-muted-foreground truncate">{k.label}</p>
-                <p className="mt-2 text-3xl font-bold text-foreground">{k.value}</p>
+                <p className="text-sm text-muted-foreground truncate">
+                  {k.label}
+                </p>
+                <p className="mt-2 text-3xl font-bold text-foreground">
+                  {k.value}
+                </p>
                 <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
                   <TrendingUp className="h-3 w-3" />
                   {k.delta}
                 </p>
               </div>
-              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${k.accent}`}>
+
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${k.accent}`}
+              >
                 <k.icon className="h-5 w-5" />
               </div>
             </div>
@@ -221,9 +223,14 @@ function Dashboard() {
         <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-base font-semibold text-foreground">Asistencias por día</h3>
-              <p className="text-xs text-muted-foreground">Registros agrupados por día</p>
+              <h3 className="text-base font-semibold text-foreground">
+                Asistencias por día
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Registros agrupados por día
+              </p>
             </div>
+
             <span className="text-xs px-2 py-1 rounded-md bg-secondary text-secondary-foreground font-medium">
               Datos reales
             </span>
@@ -231,38 +238,51 @@ function Dashboard() {
 
           <div className="flex items-end justify-between gap-3 h-56">
             {barData.map((b) => (
-              <div key={b.day} className="flex flex-col items-center gap-2 flex-1">
-                <div className="w-full flex items-end justify-center" style={{ height: "100%" }}>
+              <div
+                key={b.day}
+                className="flex flex-col items-center gap-2 flex-1"
+              >
+                <div
+                  className="w-full flex items-end justify-center"
+                  style={{ height: "100%" }}
+                >
                   <div
                     className="w-full max-w-[44px] rounded-t-md bg-gradient-to-t from-primary to-chart-2 transition-all"
                     style={{ height: `${(b.value / maxBar) * 100}%` }}
                     title={`${b.value} registros`}
                   />
                 </div>
+
                 <span className="text-xs text-muted-foreground">{b.day}</span>
-                <span className="text-xs font-semibold text-foreground">{b.value}</span>
+                <span className="text-xs font-semibold text-foreground">
+                  {b.value}
+                </span>
               </div>
             ))}
           </div>
         </div>
+
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <h3 className="text-base font-semibold text-foreground">Empleados por sucursal</h3>
-          <p className="text-xs text-muted-foreground mb-5">Distribución actual</p>
+          <h3 className="text-base font-semibold text-foreground">
+            Empleados por sucursal
+          </h3>
+          <p className="text-xs text-muted-foreground mb-5">
+            Distribución actual
+          </p>
+
           <div className="space-y-4">
-            {distribucion.map((d) => (
-              <div key={d.label}>
-                <div className="flex items-center justify-between text-sm mb-1.5">
-                  <span className="text-foreground truncate">{d.label}</span>
-                  <span className="font-semibold text-foreground tabular-nums">{d.value}</span>
-                </div>
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className={`h-full ${d.color} rounded-full`}
-                    style={{ width: `${(d.value / totalDist) * 100}%` }}
-                  />
-                </div>
+            <div>
+              <div className="flex items-center justify-between text-sm mb-1.5">
+                <span className="text-foreground truncate">Registrados</span>
+                <span className="font-semibold text-foreground tabular-nums">
+                  {totalUsuarios}
+                </span>
               </div>
-            ))}
+
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div className="h-full bg-primary rounded-full w-full" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -270,7 +290,9 @@ function Dashboard() {
       <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Activity className="h-4 w-4 text-primary" />
-          <h3 className="text-base font-semibold text-foreground">Actividad reciente</h3>
+          <h3 className="text-base font-semibold text-foreground">
+            Actividad reciente
+          </h3>
         </div>
 
         <ul className="divide-y divide-border">
@@ -279,6 +301,7 @@ function Dashboard() {
               <span className="text-xs font-mono text-muted-foreground w-12 shrink-0 pt-0.5">
                 {a.hora}
               </span>
+
               <span
                 className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
                   a.tipo === "warn"
@@ -290,6 +313,7 @@ function Dashboard() {
                         : "bg-success"
                 }`}
               />
+
               <span className="text-sm text-foreground flex-1">{a.texto}</span>
             </li>
           ))}
@@ -304,4 +328,3 @@ function Dashboard() {
     </AppShell>
   );
 }
-                                        
