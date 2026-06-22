@@ -59,6 +59,7 @@ function EmpleadosPage() {
       .getBranches()
       .then((res) => {
         const data = res.data ?? [];
+
         const nombres: string[] = data
           .filter((b: any) => b.is_active)
           .map((b: any) => String(b.name))
@@ -120,8 +121,8 @@ function EmpleadosPage() {
       codigo: e.codigo,
       nombre: e.nombre,
       puesto: e.puesto,
-      sucursal: e.sucursal,
-      email: e.email,
+      sucursal: e.sucursal === "Sin sucursal" ? "" : e.sucursal,
+      email: e.email === "Sin correo" ? "" : e.email,
       estado: e.estado,
     });
     setOpen(true);
@@ -141,6 +142,13 @@ function EmpleadosPage() {
           name: form.nombre,
           role: form.puesto,
         })
+        .then(() =>
+          timecoreApi.actualizarPerfilEmpleado(Number(form.uid), {
+            role: form.puesto,
+            sucursal: form.sucursal,
+            email: form.email,
+          })
+        )
         .then(() => {
           if (form.estado !== "Activo") {
             return timecoreApi.actualizarEstadoEmpleado(
@@ -167,6 +175,13 @@ function EmpleadosPage() {
         name: form.nombre,
         role: form.puesto,
       })
+      .then(() =>
+        timecoreApi.actualizarPerfilEmpleado(editing.id, {
+          role: form.puesto,
+          sucursal: form.sucursal,
+          email: form.email,
+        })
+      )
       .then(() => timecoreApi.actualizarEstadoEmpleado(editing.id, form.estado))
       .then(() => {
         cargarEmpleados();
@@ -370,12 +385,19 @@ function EmpleadosPage() {
                   placeholder="Nombre del empleado"
                 />
 
-                <Field
-                  label="Puesto"
+                <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">
+                  Puesto
+                </label>
+                <select
                   value={form.puesto}
-                  onChange={(v) => setForm({ ...form, puesto: v })}
-                  placeholder="usuario"
-                />
+                  onChange={(e) => setForm({ ...form, puesto: e.target.value })}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+               >
+                  <option value="usuario">usuario</option>
+                  <option value="admin">admin</option>
+                </select>
+            </div>
 
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">
