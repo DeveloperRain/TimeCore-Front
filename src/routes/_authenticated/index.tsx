@@ -155,6 +155,11 @@ function Dashboard() {
       });
   }, []);
 
+  function dismissSyncNotice() {
+    sessionStorage.setItem("timecore-sync-notice-hidden", "true");
+    setShowSyncNotice(false);
+  }
+
   const kpis: Kpi[] = [
     {
       label: "Total de empleados",
@@ -193,6 +198,27 @@ function Dashboard() {
 
   return (
     <AppShell title="Dashboard" subtitle="Resumen general del sistema">
+      {showSyncNotice && (
+        <div className="relative mb-6 rounded-lg border border-primary/20 bg-primary/5 p-4 pr-10">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium text-foreground">
+              Se recomienda que sincronice sus relojes
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Para consultar asistencias recientes, sincronice los relojes antes de revisar o exportar registros.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={dismissSyncNotice}
+            aria-label="Cerrar aviso"
+            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         {kpis.map((k) => (
           <div
