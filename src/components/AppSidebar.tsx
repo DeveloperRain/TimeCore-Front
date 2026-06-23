@@ -24,6 +24,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
 
   async function handleSignOut() {
+    sessionStorage.removeItem("timecore-sync-notice-hidden");
     await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
   }

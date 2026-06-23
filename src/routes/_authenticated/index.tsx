@@ -9,6 +9,7 @@ import {
   Building2,
   TrendingUp,
   Activity,
+  X,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/")({
