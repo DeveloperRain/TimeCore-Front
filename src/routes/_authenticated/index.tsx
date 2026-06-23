@@ -61,6 +61,9 @@ function Dashboard() {
     { day: "Sáb", value: 0 },
     { day: "Dom", value: 0 },
   ]);
+  const [showSyncNotice, setShowSyncNotice] = useState(
+    sessionStorage.getItem("timecore-sync-notice-hidden") !== "true",
+  );
 
   useEffect(() => {
     timecoreApi
