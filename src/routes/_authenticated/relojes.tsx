@@ -342,7 +342,7 @@ function RelojesPage() {
                             syncingId === r.id ? "animate-spin" : ""
                           }`}
                         />
-                        {syncingId === r.id ? "Conectando..." : "Conectar"}
+                        {syncingId === r.id ? "Sincronizando..." : "Sincronizar"}
                       </button>
 
                       <button

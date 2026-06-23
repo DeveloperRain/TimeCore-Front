@@ -1,5 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Users,
@@ -9,7 +8,7 @@ import {
   Clock,
   LogOut,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { authStorage } from "@/lib/api/timecore";
 
 const items = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -23,10 +22,13 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
 
-  async function handleSignOut() {
-    sessionStorage.removeItem("timecore-sync-notice-hidden");
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
+  function handleSignOut() {
+    authStorage.clearSession();
+
+    navigate({
+      to: "/auth",
+      replace: true,
+    });
   }
 
   return (
@@ -35,9 +37,12 @@ export function AppSidebar() {
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary">
           <Clock className="h-5 w-5 text-sidebar-primary-foreground" />
         </div>
+
         <div className="min-w-0">
           <h1 className="text-lg font-bold tracking-tight truncate">TimeCore</h1>
-          <p className="text-xs text-sidebar-foreground/60 truncate">Control Biométrico</p>
+          <p className="text-xs text-sidebar-foreground/60 truncate">
+            Control de Relojes
+          </p>
         </div>
       </div>
 
@@ -45,8 +50,10 @@ export function AppSidebar() {
         <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/50">
           Menú principal
         </p>
+
         {items.map((item) => {
           const active = pathname === item.url;
+
           return (
             <Link
               key={item.url}
@@ -66,6 +73,7 @@ export function AppSidebar() {
 
       <div className="border-t border-sidebar-border px-4 py-4">
         <button
+          type="button"
           onClick={handleSignOut}
           className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
         >

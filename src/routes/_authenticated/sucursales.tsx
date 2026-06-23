@@ -27,11 +27,13 @@ export const Route = createFileRoute("/_authenticated/sucursales")({
   component: SucursalesPage,
 });
 
+type EstadoSucursal = "Activo" | "Inactivo" | "Baja";
+
 type Sucursal = {
   id: number;
   nombre: string;
   direccion: string;
-  activo: boolean;
+  estado: EstadoSucursal;
 };
 
 type Empleado = {
@@ -48,6 +50,46 @@ type Reloj = {
   sucursal?: string;
   location?: string;
 };
+
+const BAJAS_STORAGE_KEY = "timecore-sucursales-baja";
+
+function getSucursalesBaja(): number[] {
+  try {
+    return JSON.parse(localStorage.getItem(BAJAS_STORAGE_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function setSucursalBaja(id: number, isBaja: boolean) {
+  const bajas = getSucursalesBaja();
+  const next = isBaja
+    ? Array.from(new Set([...bajas, id]))
+    : bajas.filter((branchId) => branchId !== id);
+
+  localStorage.setItem(BAJAS_STORAGE_KEY, JSON.stringify(next));
+}
+
+function getBadgeClasses(estado: EstadoSucursal) {
+  if (estado === "Activo") {
+    return {
+      badge: "bg-success/10 text-success",
+      dot: "bg-success",
+    };
+  }
+
+  if (estado === "Inactivo") {
+    return {
+      badge: "bg-destructive/10 text-destructive",
+      dot: "bg-destructive",
+    };
+  }
+
+  return {
+    badge: "bg-muted text-muted-foreground",
+    dot: "bg-muted-foreground",
+  };
+}
 
 function SucursalesPage() {
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
@@ -67,13 +109,19 @@ function SucursalesPage() {
       .getBranches()
       .then((res) => {
         const data = res.data ?? [];
+        const bajas = getSucursalesBaja();
 
-        const branches: Sucursal[] = data.map((b: any) => ({
-          id: Number(b.id),
-          nombre: String(b.name ?? ""),
-          direccion: String(b.address ?? ""),
-          activo: Boolean(b.is_active),
-        }));
+        const branches: Sucursal[] = data.map((b: any) => {
+          const id = Number(b.id);
+          const isBaja = bajas.includes(id);
+
+          return {
+            id,
+            nombre: String(b.name ?? ""),
+            direccion: String(b.address ?? ""),
+            estado: String(b.status ?? (b.is_active ? "Activo" : "Inactivo")) as EstadoSucursal,
+          };
+        });
 
         setSucursales(branches);
       })
@@ -117,13 +165,16 @@ function SucursalesPage() {
 
   const actualizarSucursal = (
     id: number,
-    data: { nombre: string; direccion: string; activo: boolean }
+    data: { nombre: string; direccion: string; estado: EstadoSucursal }
   ) => {
+    setSucursalBaja(id, data.estado === "Baja");
+
     return timecoreApi
       .actualizarBranch(id, {
         name: data.nombre,
         address: data.direccion,
-        is_active: data.activo,
+        is_active: data.estado === "Activo",
+        status: data.estado,
       })
       .then(() => {
         cargarSucursales();
@@ -276,22 +327,26 @@ function SucursalRow({
   relojes: Reloj[];
   isOpen: boolean;
   onToggle: () => void;
-  onUpdate: (data: { nombre: string; direccion: string; activo: boolean }) => Promise<any>;
+  onUpdate: (data: {
+    nombre: string;
+    direccion: string;
+    estado: EstadoSucursal;
+  }) => Promise<any>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({
     nombre: sucursal.nombre,
     direccion: sucursal.direccion,
-    activo: sucursal.activo,
+    estado: sucursal.estado,
   });
 
   useEffect(() => {
     setDraft({
       nombre: sucursal.nombre,
       direccion: sucursal.direccion,
-      activo: sucursal.activo,
+      estado: sucursal.estado,
     });
-  }, [sucursal.nombre, sucursal.direccion, sucursal.activo]);
+  }, [sucursal.nombre, sucursal.direccion, sucursal.estado]);
 
   const guardar = () => {
     if (!draft.nombre.trim() || !draft.direccion.trim()) return;
@@ -304,6 +359,8 @@ function SucursalRow({
         console.error("Error actualizando sucursal:", err);
       });
   };
+
+  const badgeClasses = getBadgeClasses(sucursal.estado);
 
   return (
     <div>
@@ -323,18 +380,10 @@ function SucursalRow({
             </h3>
 
             <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                sucursal.activo
-                  ? "bg-success/10 text-success"
-                  : "bg-muted text-muted-foreground"
-              }`}
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${badgeClasses.badge}`}
             >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  sucursal.activo ? "bg-success" : "bg-muted-foreground"
-                }`}
-              />
-              {sucursal.activo ? "Activo" : "Inactivo"}
+              <span className={`h-1.5 w-1.5 rounded-full ${badgeClasses.dot}`} />
+              {sucursal.estado}
             </span>
           </div>
 
@@ -420,17 +469,18 @@ function SucursalRow({
                 </label>
                 <select
                   disabled={!editing}
-                  value={draft.activo ? "activo" : "inactivo"}
+                  value={draft.estado}
                   onChange={(e) =>
                     setDraft({
                       ...draft,
-                      activo: e.target.value === "activo",
+                      estado: e.target.value as EstadoSucursal,
                     })
                   }
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
                 >
-                  <option value="activo">Activo</option>
-                  <option value="inactivo">Inactivo</option>
+                  <option value="Activo">Activo</option>
+                  <option value="Inactivo">Inactivo</option>
+                  <option value="Baja">Baja</option>
                 </select>
               </div>
             </div>

@@ -37,9 +37,45 @@ type AsistenciaFront = {
   sucursal: string;
   fecha: string;
   entrada: string;
-  salida: string;
   estado: string;
 };
+
+function formatearHora12(hora?: string) {
+  if (!hora) return "—";
+
+  const partes = hora.split(":");
+  const horas = Number(partes[0]);
+  const minutos = partes[1] ?? "00";
+
+  if (Number.isNaN(horas)) return hora;
+
+  const periodo = horas >= 12 ? "PM" : "AM";
+  const hora12 = horas % 12 || 12;
+
+  return `${hora12}:${minutos} ${periodo}`;
+}
+
+function normalizarEstadoAsistencia(estado: any) {
+  const value = String(estado ?? "").trim().toLowerCase();
+
+  if (value === "check_in" || value === "checkin" || value === "entrada") {
+    return "Asistió";
+  }
+
+  if (value === "check_out" || value === "checkout" || value === "salida") {
+    return "Salida";
+  }
+
+  if (value === "a tiempo" || value === "on_time") {
+    return "Asistió";
+  }
+
+  if (value === "retardo" || value === "late") {
+    return "Retardo";
+  }
+
+  return estado ? String(estado) : "Asistió";
+}
 
 function AsistenciasPage() {
   const [modo, setModo] = useState<ModoVista>("hoy");
@@ -145,9 +181,8 @@ function AsistenciasPage() {
                     "Sin sucursal"
                 ),
                 fecha,
-                entrada: hora || "—",
-                salida: "—",
-                estado: String(a.status ?? "A tiempo"),
+                entrada: formatearHora12(hora) || "—",
+                estado: normalizarEstadoAsistencia(a.status),
               };
             }
           );
@@ -248,9 +283,7 @@ function AsistenciasPage() {
             <div className="flex items-end">
               <button
                 onClick={() => {
-                window.location.href = getExcelAsistenciasUrl({
-                  modo,
-                });
+                  window.location.href = getExcelAsistenciasUrl({ modo });
                 }}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:opacity-90 transition-opacity"
               >
@@ -270,7 +303,6 @@ function AsistenciasPage() {
                 <th className="text-left font-semibold px-5 py-3">Sucursal</th>
                 <th className="text-left font-semibold px-5 py-3">Fecha</th>
                 <th className="text-left font-semibold px-5 py-3">Entrada</th>
-                <th className="text-left font-semibold px-5 py-3">Salida</th>
                 <th className="text-left font-semibold px-5 py-3">Estado</th>
               </tr>
             </thead>
@@ -291,13 +323,10 @@ function AsistenciasPage() {
                   <td className="px-5 py-3 tabular-nums text-foreground">
                     {a.entrada}
                   </td>
-                  <td className="px-5 py-3 tabular-nums text-foreground">
-                    {a.salida}
-                  </td>
                   <td className="px-5 py-3">
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                        a.estado === "A tiempo" || a.estado === "check_in"
+                        a.estado === "Asistió"
                           ? "bg-success/10 text-success"
                           : a.estado === "Retardo"
                             ? "bg-warning/20 text-warning-foreground"
@@ -313,7 +342,7 @@ function AsistenciasPage() {
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="px-5 py-10 text-center text-muted-foreground"
                   >
                     {loading

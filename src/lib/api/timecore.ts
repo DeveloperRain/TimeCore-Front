@@ -1,12 +1,26 @@
 const API_URL = "http://127.0.0.1:8000";
 
+type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  user: {
+    id: number;
+    full_name: string;
+    email: string;
+    role: string;
+  };
+};
+
 async function request(endpoint: string, options?: RequestInit) {
+  const token = localStorage.getItem("timecore-token");
+
   const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
-    ...options,
   });
 
   if (!response.ok) {
@@ -17,8 +31,54 @@ async function request(endpoint: string, options?: RequestInit) {
   return response.json();
 }
 
+export const authStorage = {
+  saveSession: (data: LoginResponse) => {
+    localStorage.setItem("timecore-token", data.access_token);
+    localStorage.setItem("timecore-user", JSON.stringify(data.user));
+    sessionStorage.removeItem("timecore-sync-notice-hidden");
+  },
+
+  clearSession: () => {
+    localStorage.removeItem("timecore-token");
+    localStorage.removeItem("timecore-user");
+    sessionStorage.removeItem("timecore-sync-notice-hidden");
+  },
+
+  getToken: () => localStorage.getItem("timecore-token"),
+
+  getUser: () => {
+    const rawUser = localStorage.getItem("timecore-user");
+
+    if (!rawUser) return null;
+
+    try {
+      return JSON.parse(rawUser);
+    } catch {
+      return null;
+    }
+  },
+
+  isAuthenticated: () => {
+    return Boolean(localStorage.getItem("timecore-token"));
+  },
+};
+
 export const timecoreApi = {
   health: () => request("/"),
+
+  login: (data: { email: string; password: string }) =>
+    request("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  register: (data: { full_name: string; email: string; password: string }) =>
+    request("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  me: () => request("/auth/me"),
 
   getUsuarios: () => request("/db/users"),
   getAsistencias: () => request("/db/attendance"),
@@ -43,7 +103,12 @@ export const timecoreApi = {
 
   actualizarBranch: (
     id: number,
-    data: { name?: string; address?: string; is_active?: boolean }
+    data: {
+      name?: string;
+      address?: string;
+      is_active?: boolean;
+      status?: "Activo" | "Inactivo" | "Baja";
+    }
   ) =>
     request(`/branches/${id}`, {
       method: "PUT",
@@ -158,14 +223,15 @@ export const timecoreApi = {
     request(`/users/${uid}`, {
       method: "DELETE",
     }),
-  };
+};
 
-  export const getExcelAsistenciasUrl = (params?: {
+export const getExcelAsistenciasUrl = (params?: {
   modo?: "hoy" | "semana" | "todas";
   startDate?: string;
   endDate?: string;
 }) => {
   const url = new URL(`${API_URL}/users/attendance/download`);
+  const token = authStorage.getToken();
 
   if (params?.modo) {
     url.searchParams.set("modo", params.modo);
@@ -176,9 +242,23 @@ export const timecoreApi = {
     url.searchParams.set("end_date", params.endDate);
   }
 
+  if (token) {
+    url.searchParams.set("token", token);
+  }
+
   return url.toString();
 };
 
-  export const getExcelReporteUrl = (startDate: string, endDate: string) => {
-  return `${API_URL}/db/attendance/report/download?start_date=${startDate}&end_date=${endDate}`;
+export const getExcelReporteUrl = (startDate: string, endDate: string) => {
+  const url = new URL(`${API_URL}/db/attendance/report/download`);
+  const token = authStorage.getToken();
+
+  url.searchParams.set("start_date", startDate);
+  url.searchParams.set("end_date", endDate);
+
+  if (token) {
+    url.searchParams.set("token", token);
   }
+
+  return url.toString();
+};
