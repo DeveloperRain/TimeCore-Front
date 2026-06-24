@@ -107,6 +107,7 @@ function Dashboard() {
   const [sucursalesActivas, setSucursalesActivas] = useState(0);
   const [actividad, setActividad] = useState<ActividadItem[]>([]);
   const [barData, setBarData] = useState<BarItem[]>(emptyWeekData);
+  const [loadingSucursales, setLoadingSucursales] = useState(true);
   const [showSyncNotice, setShowSyncNotice] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.sessionStorage.getItem("timecore-sync-notice-hidden") !== "true";
@@ -189,10 +190,12 @@ function Dashboard() {
     });
 
     setEmpleadosPorSucursal(stats);
+    setLoadingSucursales(false);
   })
   .catch((err) => {
     console.error("Error obteniendo empleados por sucursal:", err);
     setEmpleadosPorSucursal([]);
+    setLoadingSucursales(false);
   });
 
         setBarData([
@@ -209,6 +212,7 @@ function Dashboard() {
         console.error("Error obteniendo asistencias de la semana:", err);
         setActividad([]);
         setBarData(emptyWeekData);
+        setLoadingSucursales(false);
       });
   }, []);
 
@@ -381,7 +385,13 @@ function Dashboard() {
               );
               })}
 
-              {empleadosPorSucursal.length === 0 && (
+              {loadingSucursales && empleadosPorSucursal.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Cargando sucursales...
+                </p>
+              )}
+
+              {!loadingSucursales && empleadosPorSucursal.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   No hay sucursales registradas.
           </p>

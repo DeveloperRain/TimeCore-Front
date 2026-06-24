@@ -1,4 +1,4 @@
-import { Bell, Search } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { authStorage, timecoreApi } from "@/lib/api/timecore";
 
@@ -22,6 +22,7 @@ type DeviceApi = {
   status?: string;
   is_active?: boolean;
   activo?: boolean;
+  estado?: string;
 };
 
 type BranchApi = {
@@ -42,6 +43,14 @@ function normalizarEstado(value: unknown) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function normalizar(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function getData(res: any) {
+  return Array.isArray(res) ? res : res?.data ?? [];
+}
+
 export function AppHeader({
   title,
   subtitle,
@@ -54,6 +63,25 @@ export function AppHeader({
   const [branches, setBranches] = useState<BranchApi[]>([]);
   const [users, setUsers] = useState<UserApi[]>([]);
   const [openAlerts, setOpenAlerts] = useState(false);
+
+  function cargarNotificaciones() {
+    Promise.allSettled([
+      timecoreApi.getDevices().then(getData),
+      timecoreApi.getBranches().then(getData),
+      timecoreApi.getUsuarios().then(getData),
+    ])
+      .then(([devicesRes, branchesRes, usersRes]) => {
+        if (devicesRes.status === "fulfilled") {
+          setDevices(getData(devicesRes.value));
+        }
+        if (branchesRes.status === "fulfilled") {
+          setBranches(getData(branchesRes.value));
+        }
+        if (usersRes.status === "fulfilled") {
+          setUsers(getData(usersRes.value));
+        }
+      });
+  }
 
   useEffect(() => {
     const storedUser = authStorage.getUser();
@@ -68,22 +96,17 @@ export function AppHeader({
       });
     }
 
-    Promise.all([
-      timecoreApi.getDevices(),
-      timecoreApi.getBranches(),
-      timecoreApi.getUsuarios(),
-    ])
-      .then(([resDevices, resBranches, resUsers]) => {
-        setDevices(Array.isArray(resDevices) ? resDevices : resDevices?.data ?? []);
-        setBranches(Array.isArray(resBranches) ? resBranches : resBranches?.data ?? []);
-        setUsers(Array.isArray(resUsers) ? resUsers : resUsers?.data ?? []);
-      })
-      .catch((err) => {
-        console.error("Error cargando notificaciones:", err);
-        setDevices([]);
-        setBranches([]);
-        setUsers([]);
-      });
+    cargarNotificaciones();
+    const interval = window.setInterval(() => {
+      cargarNotificaciones();
+    }, 15000); // Actualizar cada 15 segundos (15000 ms)
+
+    window.addEventListener("focus", cargarNotificaciones);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", cargarNotificaciones);
+    };
   }, []);
 
   const alerts = useMemo<AlertItem[]>(() => {
@@ -101,12 +124,22 @@ export function AppHeader({
     devices.forEach((device) => {
       const name = device.name ?? device.nombre ?? `Reloj #${device.id ?? ""}`;
       const ip = device.ip ? ` (${device.ip})` : "";
-      const status = normalizarEstado(device.status);
-      const isActive = Boolean(device.is_active ?? device.activo ?? true);
+      const status = normalizar(device.status ?? device.estado);
+      const isActive = device.is_active ?? device.activo ?? true;
 
-      if (!isActive) {
+      if (status === "baja") {
         nextAlerts.push({
-          id: `inactive-device-${device.id ?? name}`,
+          id: `device-baja-${device.id ?? name}`,
+          title: `${name} dado de baja`,
+          description: `El reloj${ip} está marcado como baja.`,
+          level: "warning",
+        });
+        return;
+      }
+
+      if (status === "inactivo" || isActive === false) {
+        nextAlerts.push({
+          id: `device-inactive-${device.id ?? name}`,
           title: `${name} inactivo`,
           description: `El reloj${ip} está marcado como inactivo.`,
           level: "warning",
@@ -115,10 +148,10 @@ export function AppHeader({
       }
 
       if (
-        status.includes("desconectado") ||
-        status.includes("error") ||
-        status.includes("fallo") ||
-        status.includes("offline")
+        status === "inactivo" ||
+        status === "offline" ||
+        status === "desconectado" ||
+        status === "sin conexión"
       ) {
         nextAlerts.push({
           id: `offline-device-${device.id ?? name}`,
@@ -198,7 +231,10 @@ export function AppHeader({
           <div className="relative">
             <button
               type="button"
-              onClick={() => setOpenAlerts((value) => !value)}
+              onClick={() => {
+                cargarNotificaciones();
+                setOpenAlerts((value) => !value);
+              }}
               className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-input bg-background hover:bg-accent transition-colors"
               aria-label="Ver notificaciones"
             >

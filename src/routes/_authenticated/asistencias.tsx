@@ -77,6 +77,14 @@ function normalizarEstadoAsistencia(estado: any) {
   return estado ? String(estado) : "Asistió";
 }
 
+function getTodayDateString() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
 function AsistenciasPage() {
   const [modo, setModo] = useState<ModoVista>("hoy");
   const [fecha, setFecha] = useState("");
@@ -87,6 +95,7 @@ function AsistenciasPage() {
   const [empleados, setEmpleados] = useState<EmpleadoFront[]>([]);
   const [sucursales, setSucursales] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingSucursales, setLoadingSucursales] = useState(true);
 
   useEffect(() => {
     cargarSucursales();
@@ -95,24 +104,29 @@ function AsistenciasPage() {
 
   useEffect(() => {
     cargarTodo();
-  }, [modo]);
+  }, [modo, fecha]);
 
   const cargarSucursales = () => {
+    setLoadingSucursales(true);
+
     timecoreApi
       .getBranches()
       .then((res) => {
-        const data = res.data ?? [];
+        const data = Array.isArray(res) ? res : res?.data ?? [];
 
         const nombres: string[] = data
-          .filter((b: any) => b.is_active)
           .map((b: any) => String(b.name))
-          .filter((name: string) => name.trim() !== "");
+          .map((name: string) => name.trim())
+          .filter((name: string) => name !== "");
 
         setSucursales(nombres);
       })
       .catch((err) => {
         console.error("Error cargando sucursales:", err);
         setSucursales([]);
+      })
+      .finally(() => {
+        setLoadingSucursales(false);
       });
   };
 
@@ -138,8 +152,9 @@ function AsistenciasPage() {
 
         setEmpleados(empleadosApi);
 
-        const request =
-          modo === "hoy"
+        const request = fecha
+          ? timecoreApi.getAsistencias()
+          : modo === "hoy"
             ? timecoreApi.getAsistenciasHoy()
             : modo === "semana"
               ? timecoreApi.getAsistenciasSemana()
@@ -202,7 +217,8 @@ function AsistenciasPage() {
   };
 
   const filtered = asistencias.filter((a) => {
-    const mF = !fecha || a.fecha === fecha;
+    const today = getTodayDateString();
+    const mF = !fecha || (a.fecha >= fecha && a.fecha <= today);
     const mE = !empleado || a.codigo === empleado;
     const mS = !sucursal || a.sucursal === sucursal;
     return mF && mE && mS;
@@ -226,7 +242,7 @@ function AsistenciasPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Vista</label>
+              <label className="text-xs text-muted-foreground">Por bloques</label>
               <select
                 value={modo}
                 onChange={(e) => setModo(e.target.value as ModoVista)}
@@ -239,10 +255,11 @@ function AsistenciasPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Fecha</label>
+              <label className="text-xs text-muted-foreground">Desde fecha</label>
               <input
                 type="date"
                 value={fecha}
+                max={getTodayDateString()}
                 onChange={(e) => setFecha(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
@@ -272,6 +289,11 @@ function AsistenciasPage() {
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
                 <option value="">Todas</option>
+                {loadingSucursales && (
+                  <option value="" disabled>
+                    Cargando sucursales...
+                  </option>
+                )}
                 {sucursales.map((s) => (
                   <option key={s} value={s}>
                     {s}
@@ -283,7 +305,15 @@ function AsistenciasPage() {
             <div className="flex items-end">
               <button
                 onClick={() => {
-                  window.location.href = getExcelAsistenciasUrl({ modo });
+                  window.location.href = getExcelAsistenciasUrl(
+                    fecha
+                      ? {
+                          modo: "todas",
+                          startDate: fecha,
+                          endDate: getTodayDateString(),
+                        }
+                      : { modo }
+                  );
                 }}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:opacity-90 transition-opacity"
               >

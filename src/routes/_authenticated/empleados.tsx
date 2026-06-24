@@ -55,21 +55,23 @@ function EmpleadosPage() {
   }, []);
 
   const cargarSucursales = () => {
-    timecoreApi
+    return timecoreApi
       .getBranches()
       .then((res) => {
-        const data = res.data ?? [];
+        const data = Array.isArray(res) ? res : res?.data ?? [];
 
         const nombres: string[] = data
-          .filter((b: any) => b.is_active)
           .map((b: any) => String(b.name))
-          .filter((name: string) => name.trim() !== "");
+          .map((name: string) => name.trim())
+          .filter((name: string) => name !== "");
 
         setSucursales(nombres);
+        return nombres;
       })
       .catch((err) => {
         console.error("Error cargando sucursales:", err);
         setSucursales([]);
+        return [];
       });
   };
 
@@ -101,20 +103,23 @@ function EmpleadosPage() {
   };
 
   const openAdd = () => {
-    setEditing(null);
-    setForm({
-      uid: "",
-      codigo: "",
-      nombre: "",
-      puesto: "usuario",
-      sucursal: sucursales[0] ?? "",
-      email: "",
-      estado: "Activo",
+    cargarSucursales().then((nombres) => {
+      setEditing(null);
+      setForm({
+        uid: "",
+        codigo: "",
+        nombre: "",
+        puesto: "usuario",
+        sucursal: nombres[0] ?? "",
+        email: "",
+        estado: "Activo",
+      });
+      setOpen(true);
     });
-    setOpen(true);
   };
 
   const openEdit = (e: EmpleadoFront) => {
+    cargarSucursales();
     setEditing(e);
     setForm({
       uid: String(e.id),
@@ -335,7 +340,7 @@ function EmpleadosPage() {
                     className="px-5 py-10 text-center text-muted-foreground"
                   >
                     {loading
-                      ? "Cargando datos..."
+                      ? "Cargando empleados..."
                       : "No se encontraron empleados."}
                   </td>
                 </tr>

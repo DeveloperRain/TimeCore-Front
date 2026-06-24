@@ -68,23 +68,27 @@ function RelojesPage() {
   }, []);
 
   const cargarSucursales = () => {
-    timecoreApi
+    return timecoreApi
       .getBranches()
       .then((res) => {
-        const data = res.data ?? [];
+        const data = Array.isArray(res) ? res : res?.data ?? [];
 
-        const branches: SucursalFront[] = data.map((b: any) => ({
-          id: Number(b.id),
-          nombre: String(b.name ?? ""),
-          direccion: String(b.address ?? ""),
-          activo: Boolean(b.is_active),
-        }));
+        const branches: SucursalFront[] = data
+          .map((b: any) => ({
+            id: Number(b.id),
+            nombre: String(b.name ?? "").trim(),
+            direccion: String(b.address ?? ""),
+            activo: Boolean(b.is_active ?? true),
+          }))
+          .filter((b: SucursalFront) => b.nombre !== "");
 
         setSucursales(branches);
+        return branches;
       })
       .catch((err) => {
         console.error("Error cargando sucursales:", err);
         setSucursales([]);
+        return [];
       });
   };
 
@@ -127,21 +131,22 @@ function RelojesPage() {
   };
 
   const openAdd = () => {
-    const primeraSucursal = sucursales.find((s) => s.activo);
-
-    setEditing(null);
-    setForm({
-      nombre: "",
-      ip: "",
-      puerto: 4370,
-      sucursal: primeraSucursal?.nombre ?? "",
-      ubicacion: "",
-      activo: true,
+    cargarSucursales().then((branches) => {
+      setEditing(null);
+      setForm({
+        nombre: "",
+        ip: "",
+        puerto: 4370,
+        sucursal: branches[0]?.nombre ?? "",
+        ubicacion: "",
+        activo: true,
+      });
+      setOpen(true);
     });
-    setOpen(true);
   };
 
   const openEdit = (r: RelojFront) => {
+    cargarSucursales();
     setEditing(r);
     setForm({
       nombre: r.nombre,
@@ -441,13 +446,11 @@ function RelojesPage() {
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">Seleccionar sucursal...</option>
-                    {sucursales
-                      .filter((s) => s.activo)
-                      .map((s) => (
-                        <option key={s.id} value={s.nombre}>
-                          {s.nombre}
-                        </option>
-                      ))}
+                    {sucursales.map((s) => (
+                      <option key={s.id} value={s.nombre}>
+                        {s.nombre}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

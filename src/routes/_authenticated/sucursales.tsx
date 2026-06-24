@@ -237,7 +237,7 @@ function SucursalesPage() {
 
           {sucursales.length === 0 && (
             <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-              No hay sucursales registradas.
+              Cargando Sucursales...
             </div>
           )}
         </div>
