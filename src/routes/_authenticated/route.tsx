@@ -1,9 +1,14 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { authStorage } from "@/lib/api/timecore";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: () => {
-    if (!authStorage.isAuthenticated()) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const token = window.localStorage.getItem("timecore-token");
+
+    if (!token) {
       throw redirect({
         to: "/auth",
       });

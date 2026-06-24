@@ -107,9 +107,10 @@ function Dashboard() {
   const [sucursalesActivas, setSucursalesActivas] = useState(0);
   const [actividad, setActividad] = useState<ActividadItem[]>([]);
   const [barData, setBarData] = useState<BarItem[]>(emptyWeekData);
-  const [showSyncNotice, setShowSyncNotice] = useState(
-    sessionStorage.getItem("timecore-sync-notice-hidden") !== "true",
-  );
+  const [showSyncNotice, setShowSyncNotice] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.sessionStorage.getItem("timecore-sync-notice-hidden") !== "true";
+    });
 
   useEffect(() => {
     timecoreApi
@@ -212,7 +213,9 @@ function Dashboard() {
   }, []);
 
   function dismissSyncNotice() {
-    sessionStorage.setItem("timecore-sync-notice-hidden", "true");
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("timecore-sync-notice-hidden", "true");
+    }
     setShowSyncNotice(false);
   }
 
