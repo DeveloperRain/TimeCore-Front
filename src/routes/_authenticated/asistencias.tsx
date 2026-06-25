@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { timecoreApi, getExcelAsistenciasUrl } from "@/lib/api/timecore";
-import { Download, Filter } from "lucide-react";
+import { Download, Filter, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/asistencias")({
   head: () => ({
@@ -39,6 +39,23 @@ type AsistenciaFront = {
   entrada: string;
   estado: string;
 };
+
+const meses = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+
+const diasSemana = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 function formatearHora12(hora?: string) {
   if (!hora) return "—";
@@ -85,6 +102,215 @@ function getTodayDateString() {
 
   return `${year}-${month}-${day}`;
 }
+
+function dateToString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function stringToDate(value: string) {
+  if (!value) return null;
+
+  const [year, month, day] = value.split("-").map(Number);
+
+  if (!year || !month || !day) return null;
+
+  return new Date(year, month - 1, day);
+}
+
+function formatearFechaVisual(value: string) {
+  const date = stringToDate(value);
+
+  if (!date) return "";
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = meses[date.getMonth()];
+  const year = date.getFullYear();
+
+  return `${day} de ${month} de ${year}`;
+}
+
+function FechaPicker({
+  value,
+  onChange,
+  max,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  max: string;
+}) {
+  const selectedDate = stringToDate(value);
+  const today = stringToDate(max) ?? new Date();
+
+  const [open, setOpen] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState<Date>(
+    selectedDate ?? today
+  );
+
+  useEffect(() => {
+    if (selectedDate) {
+      setCurrentMonth(selectedDate);
+    }
+  }, [value]);
+
+  const days = useMemo(() => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+
+    const startOffset = (firstDay.getDay() + 6) % 7;
+    const totalDays = lastDay.getDate();
+
+    const cells: Array<Date | null> = [];
+
+    for (let i = 0; i < startOffset; i++) {
+      cells.push(null);
+    }
+
+    for (let day = 1; day <= totalDays; day++) {
+      cells.push(new Date(year, month, day));
+    }
+
+    return cells;
+  }, [currentMonth]);
+
+  const goPrevMonth = () => {
+    setCurrentMonth(
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+    );
+  };
+
+  const goNextMonth = () => {
+    setCurrentMonth(
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
+    );
+  };
+
+  const clearDate = () => {
+    onChange("");
+    setOpen(false);
+  };
+
+  const selectToday = () => {
+    onChange(dateToString(today));
+    setCurrentMonth(today);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm flex items-center justify-between gap-2 text-left"
+      >
+        <span className={value ? "text-foreground" : "text-muted-foreground"}>
+          {value ? formatearFechaVisual(value) : "Seleccionar fecha"}
+        </span>
+        <Calendar className="h-4 w-4 text-muted-foreground" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-2 w-80 rounded-lg border border-border bg-card shadow-lg p-3">
+          <div className="flex items-center justify-between mb-3">
+            <button
+              type="button"
+              onClick={goPrevMonth}
+              className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-accent"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <p className="text-sm font-semibold text-foreground">
+              {meses[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+            </p>
+
+            <button
+              type="button"
+              onClick={goNextMonth}
+              className="h-8 w-8 inline-flex items-center justify-center rounded-md hover:bg-accent"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {diasSemana.map((d) => (
+              <div
+                key={d}
+                className="text-center text-[11px] font-medium text-muted-foreground py-1"
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {days.map((date, index) => {
+              if (!date) {
+                return <div key={`empty-${index}`} className="h-8" />;
+              }
+
+              const dateString = dateToString(date);
+              const isSelected = value === dateString;
+              const isToday = dateString === getTodayDateString();
+              const disabled = dateString > max;
+
+              return (
+                <button
+                  key={dateString}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onChange(dateString);
+                    setOpen(false);
+                  }}
+                  className={`h-8 rounded-md text-sm transition-colors ${
+                    isSelected
+                      ? "bg-primary text-primary-foreground"
+                      : isToday
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "hover:bg-accent text-foreground"
+                  } ${
+                    disabled
+                      ? "opacity-40 cursor-not-allowed hover:bg-transparent"
+                      : ""
+                  }`}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between pt-3 mt-3 border-t border-border">
+            <button
+              type="button"
+              onClick={clearDate}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Limpiar
+            </button>
+
+            <button
+              type="button"
+              onClick={selectToday}
+              className="text-xs text-primary hover:underline"
+            >
+              Hoy
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AsistenciasPage() {
   const [modo, setModo] = useState<ModoVista>("hoy");
   const [fecha, setFecha] = useState("");
@@ -96,6 +322,85 @@ function AsistenciasPage() {
   const [sucursales, setSucursales] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingSucursales, setLoadingSucursales] = useState(true);
+
+
+  const obtenerNombreMes = (date: Date) => {
+  const meses = [
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
+  ];
+
+  return meses[date.getMonth()];
+  };
+
+  const limpiarNombreArchivo = (value: string) => {
+    return value
+      .trim()
+      .replace(/\s+/g, "")
+      .replace(/[\\/:*?"<>|]/g, "");
+  };
+
+  const construirNombreExcel = () => {
+    const hoy = new Date();
+    const diaActual = String(hoy.getDate()).padStart(2, "0");
+    const mesActual = obtenerNombreMes(hoy);
+    const añoActual = hoy.getFullYear();
+
+    const fechaSeleccionada = fecha ? stringToDate(fecha) : hoy;
+    const diaSeleccionado = fechaSeleccionada
+      ? String(fechaSeleccionada.getDate()).padStart(2, "0")
+      : diaActual;
+
+    const nombreSucursal = sucursal
+      ? limpiarNombreArchivo(sucursal)
+      : "TodasLasSucursales";
+
+    return `${nombreSucursal} ${diaSeleccionado}-${diaActual}_${mesActual}_${añoActual}.xlsx`;
+  };
+
+  const descargarExcel = async () => {
+    try {
+      const url = getExcelAsistenciasUrl(
+        fecha
+          ? {
+              modo: "todas",
+              startDate: fecha,
+              endDate: getTodayDateString(),
+            }
+          : { modo }
+      );
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error("No se pudo descargar el archivo Excel");
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = construirNombreExcel();
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (err) {
+    console.error("Error descargando Excel:", err);
+  }
+  };
 
   useEffect(() => {
     cargarSucursales();
@@ -256,12 +561,10 @@ function AsistenciasPage() {
 
             <div className="space-y-1.5">
               <label className="text-xs text-muted-foreground">Desde fecha</label>
-              <input
-                type="date"
+              <FechaPicker
                 value={fecha}
+                onChange={setFecha}
                 max={getTodayDateString()}
-                onChange={(e) => setFecha(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </div>
 
@@ -304,17 +607,7 @@ function AsistenciasPage() {
 
             <div className="flex items-end">
               <button
-                onClick={() => {
-                  window.location.href = getExcelAsistenciasUrl(
-                    fecha
-                      ? {
-                          modo: "todas",
-                          startDate: fecha,
-                          endDate: getTodayDateString(),
-                        }
-                      : { modo }
-                  );
-                }}
+                onClick={descargarExcel}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:opacity-90 transition-opacity"
               >
                 <Download className="h-4 w-4" />
