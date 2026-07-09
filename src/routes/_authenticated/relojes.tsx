@@ -377,7 +377,7 @@ function RelojesPage() {
           },
           {
             time: getCurrentTime(),
-            message: `Se obtuvieron ${obtainedEvents} eventos`,
+            message: `Datos en el reloj:  ${obtainedEvents} Datos`,
           },
           {
             time: getCurrentTime(),
