@@ -15,6 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+import { getErrorMessage } from "@/lib/api/errors";
 export const Route = createFileRoute("/_authenticated/asistencias")({
   head: () => ({
     meta: [
@@ -574,7 +575,7 @@ function AsistenciasPage() {
       .catch((err) => {
         pendingScrollIncidentRef.current = null;
         console.error("Error guardando incidencia:", err);
-        window.alert("No se pudo guardar la incidencia.");
+        window.alert(getErrorMessage(err, "No se pudo guardar la incidencia."));
       })
       .finally(() => {
         setSavingIncident(false);
@@ -638,7 +639,7 @@ function AsistenciasPage() {
       })
       .catch((err) => {
         console.error("Error eliminando incidencia:", err);
-        window.alert("No se pudo borrar la incidencia.");
+        window.alert(getErrorMessage(err, "No se pudo borrar la incidencia."));
       });
   };
 

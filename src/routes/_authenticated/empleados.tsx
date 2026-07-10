@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { timecoreApi } from "@/lib/api/timecore";
 import { Search, Plus, Pencil, X } from "lucide-react";
 
+import { getErrorMessage } from "@/lib/api/errors";
 export const Route = createFileRoute("/_authenticated/empleados")({
   validateSearch: (search: Record<string, unknown>) => {
     const rawBranchId = search.branch_id;

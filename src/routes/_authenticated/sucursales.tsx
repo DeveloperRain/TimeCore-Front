@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { timecoreApi } from "@/lib/api/timecore";
 
+import { getErrorMessage } from "@/lib/api/errors";
 export const Route = createFileRoute("/_authenticated/sucursales")({
   head: () => ({
     meta: [
