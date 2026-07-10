@@ -287,7 +287,7 @@ function EmpleadosPage() {
         })
         .catch((err) => {
           console.error("Error creando empleado:", err);
-          alert("No se pudo crear el empleado");
+          alert("No se pudo crear el empleado, revise si el reloj está conectado o la UID es correcta.");
         });
 
       return;
@@ -309,7 +309,7 @@ function EmpleadosPage() {
       })
       .catch((err) => {
         console.error("Error actualizando empleado:", err);
-        alert("No se pudo actualizar el empleado, revise si el reloj está conectado");
+        alert("No se pudo actualizar el empleado, revise si el reloj está conectado o la UID es correcta.");
       });
   };
 
