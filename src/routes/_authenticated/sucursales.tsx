@@ -184,8 +184,14 @@ function SucursalesPage() {
       .then(() => {
         cargarSucursales();
         cargarDatosRelacionados();
+        alert("Sucursal actualizada con éxito");
+      })
+      .catch((err) => {
+        console.error("Error actualizando sucursal:", err);
+        alert("Error al actualizar la sucursal");
       });
   };
+
 
   const abrirDashboardSucursal = (sucursal: Sucursal) => {
   navigate({

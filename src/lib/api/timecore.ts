@@ -288,6 +288,8 @@ export const timecoreApi = {
     empresa?: "FISMAN" | "SELEFF";
     password: string;
     branch_id?: number;
+    auto_sync_enabled?: boolean;
+    sync_interval_minutes?: number;
   }) =>
     request("/db/devices", {
       method: "POST",
@@ -306,6 +308,8 @@ export const timecoreApi = {
       password?: string;
       activo?: boolean;
       branch_id?: number;
+      auto_sync_enabled?: boolean;
+      sync_interval_minutes?: number;
     }
   ) =>
     request(`/db/devices/${id}`, {

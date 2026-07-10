@@ -24,6 +24,9 @@ type RelojFront = {
   password: string;
   estado: "Conectado" | "Desconectado" | "Desconocido" | "Inactivo";
   ultimaSync: string;
+  proximaSync: string;
+  autoSyncEnabled: boolean;
+  syncIntervalMinutes: number;
   activo: boolean;
   branch_id?: number | null;
 };
@@ -104,6 +107,8 @@ function RelojesPage() {
     ubicacion: "",
     empresa: "FISMAN" as "FISMAN" | "SELEFF",
     password: "0",
+    autoSyncEnabled: true,
+    syncIntervalMinutes: 4,
     activo: true,
   });
 
@@ -154,11 +159,19 @@ function RelojesPage() {
     password: String(r.password ?? r.device_password ?? "0"),
     estado: normalizarEstadoReloj(r),
     ultimaSync:
-      r.ultima_sincronizacion || r.last_connection
-        ? new Date(r.ultima_sincronizacion ?? r.last_connection).toLocaleString(
-            "es-MX"
-          )
+      r.ultima_sincronizacion || r.last_sync_at || r.last_connection
+        ? new Date(
+            r.ultima_sincronizacion ?? r.last_sync_at ?? r.last_connection
+          ).toLocaleString("es-MX")
         : "Sin sincronización",
+    proximaSync:
+      r.next_sync_at
+        ? new Date(r.next_sync_at).toLocaleString("es-MX")
+        : Boolean(r.auto_sync_enabled ?? true)
+          ? "Al iniciar / pendiente"
+          : "Desactivada",
+    autoSyncEnabled: Boolean(r.auto_sync_enabled ?? true),
+    syncIntervalMinutes: Number(r.sync_interval_minutes ?? 4),
     activo: Boolean(r.activo ?? r.is_active ?? true),
     branch_id:
       r.branch_id !== undefined && r.branch_id !== null
@@ -270,6 +283,8 @@ function RelojesPage() {
         ubicacion: "",
         empresa: "FISMAN",
         password: "0",
+        autoSyncEnabled: true,
+        syncIntervalMinutes: 4,
         activo: true,
       });
       setOpen(true);
@@ -287,6 +302,8 @@ function RelojesPage() {
       ubicacion: r.ubicacion === "Sin ubicación" ? "" : r.ubicacion,
       empresa: r.empresa,
       password: r.password || "0",
+      autoSyncEnabled: r.autoSyncEnabled,
+      syncIntervalMinutes: r.syncIntervalMinutes,
       activo: r.activo,
     });
     setOpen(true);
@@ -312,6 +329,8 @@ function RelojesPage() {
       ubicacion: form.ubicacion,
       empresa: form.empresa,
       password: form.password.trim(),
+      auto_sync_enabled: form.autoSyncEnabled,
+      sync_interval_minutes: form.syncIntervalMinutes,
       activo: form.activo,
       branch_id: selectedBranchId,
     };
@@ -324,6 +343,7 @@ function RelojesPage() {
       .then(() => {
         setOpen(false);
         cargarRelojes();
+        alert(`Reloj ${editing ? "actualizado" : "creado"} con éxito`);
       })
       .catch((err) => {
         console.error("Error guardando reloj:", err);
@@ -498,7 +518,7 @@ function RelojesPage() {
                 ? `Dispositivos asignados a ${
                     selectedBranchName || "esta sucursal"
                   }.`
-                : "Administra dispositivos ZKTeco registrados en PostgreSQL."}
+                : "Administra relojes ZKTeco / Steren registrados."}
             </p>
           </div>
 
@@ -525,7 +545,13 @@ function RelojesPage() {
                 <th className="text-left font-semibold px-5 py-3">Empresa</th>
                 <th className="text-left font-semibold px-5 py-3">Estado</th>
                 <th className="text-left font-semibold px-5 py-3">
+                  Sincronización automática
+                </th>
+                <th className="text-left font-semibold px-5 py-3">
                   Última sincronización
+                </th>
+                <th className="text-left font-semibold px-5 py-3">
+                  Próxima sincronización
                 </th>
                 <th className="text-right font-semibold px-5 py-3">Acciones</th>
               </tr>
@@ -558,8 +584,26 @@ function RelojesPage() {
                     <EstadoBadge estado={r.estado} />
                   </td>
 
+                  <td className="px-5 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        r.autoSyncEnabled
+                          ? "bg-success/10 text-success"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {r.autoSyncEnabled
+                        ? `Cada ${r.syncIntervalMinutes} min`
+                        : "Desactivada"}
+                    </span>
+                  </td>
+
                   <td className="px-5 py-3 text-muted-foreground tabular-nums">
                     {r.ultimaSync}
+                  </td>
+
+                  <td className="px-5 py-3 text-muted-foreground tabular-nums">
+                    {r.proximaSync}
                   </td>
 
                   <td className="px-5 py-3">
@@ -619,7 +663,7 @@ function RelojesPage() {
               {relojes.length === 0 && (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={11}
                     className="px-5 py-10 text-center text-muted-foreground"
                   >
                     {loading
@@ -732,6 +776,56 @@ function RelojesPage() {
                   onChange={(v) => setForm({ ...form, password: v })}
                   placeholder="Ej. 0"
                 />
+
+                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3 sm:col-span-2">
+                  <label className="flex cursor-pointer items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        Sincronización automática
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Descarga asistencias del reloj sin intervención del usuario.
+                      </p>
+                    </div>
+
+                    <input
+                      type="checkbox"
+                      checked={form.autoSyncEnabled}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          autoSyncEnabled: e.target.checked,
+                        })
+                      }
+                      className="h-5 w-5 accent-primary"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium text-foreground">
+                        Sincronizar cada
+                      </label>
+                      <select
+                        value={form.syncIntervalMinutes}
+                        disabled={!form.autoSyncEnabled}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            syncIntervalMinutes: Number(e.target.value),
+                          })
+                        }
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {[1, 2, 4, 5, 10, 15, 30, 60].map((minutes) => (
+                          <option key={minutes} value={minutes}>
+                            {minutes} {minutes === 1 ? "minuto" : "minutos"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
