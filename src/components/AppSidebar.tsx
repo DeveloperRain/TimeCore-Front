@@ -10,10 +10,11 @@ import {
   ClipboardList,
   Fingerprint,
   Building2,
-  Clock,
   LogOut,
 } from "lucide-react";
 import { authStorage } from "@/lib/api/timecore";
+import logoHorizontal from "@/assets/timecore-logo-horizontal.png.asset.json";
+import logoClock from "@/assets/timecore-logo-clock.png.asset.json";
 
 const generalItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, preserveBranch: true },
@@ -77,7 +78,7 @@ export function AppSidebar({
     >
       <div
         className={`flex items-center border-b border-sidebar-border ${
-          collapsed ? "justify-center px-0 py-5" : "gap-3 px-6 py-5"
+          collapsed ? "justify-center px-2 py-3" : "gap-3 px-4 py-4"
         }`}
       >
         <button
@@ -85,19 +86,22 @@ export function AppSidebar({
           onClick={onToggleCollapsed}
           title={collapsed ? "Mostrar menu" : "Ocultar menu"}
           aria-label={collapsed ? "Mostrar menu" : "Ocultar menu"}
-          className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary transition-transform hover:scale-105 active:scale-95"
+          className="flex items-center justify-center rounded-lg transition-transform hover:scale-105 active:scale-95 bg-white p-1"
         >
-          <Clock className="h-5 w-5 text-sidebar-primary-foreground" />
+          {collapsed ? (
+            <img
+              src={logoClock.url}
+              alt="TimeCore"
+              className="h-12 w-12 object-contain"
+            />
+          ) : (
+            <img
+              src={logoHorizontal.url}
+              alt="TimeCore"
+              className="h-12 w-auto object-contain"
+            />
+          )}
         </button>
-
-        {!collapsed && (
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold tracking-tight truncate">TimeCore</h1>
-            <p className="text-xs text-sidebar-foreground/60 truncate">
-              Control de Relojes
-            </p>
-          </div>
-        )}
       </div>
 
       {!collapsed && (
