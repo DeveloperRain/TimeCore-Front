@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { authStorage } from "@/lib/api/timecore";
 import logoHorizontal from "@/assets/timecore-logo-horizontal.png.asset.json";
-import logoClock from "@/assets/timecore-logo-clock.png.asset.json";
+import timeCoreLogo from "@/imgs/TIMECORE_LOGO_Blanco.png";
 
 const generalItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, preserveBranch: true },
@@ -90,13 +90,13 @@ export function AppSidebar({
         >
           {collapsed ? (
             <img
-              src={logoClock.url}
+              src={timeCoreLogo}
               alt="TimeCore"
               className="h-12 w-12 object-contain"
             />
           ) : (
             <img
-              src={logoHorizontal.url}
+              src={timeCoreLogo}
               alt="TimeCore"
               className="h-12 w-auto object-contain"
             />

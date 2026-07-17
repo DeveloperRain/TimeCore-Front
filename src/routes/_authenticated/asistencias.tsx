@@ -97,6 +97,61 @@ const EMPTY_PRENOMINA: PrenominaData = {
   rows: [],
 };
 
+function normalizePrenominaData(rawData: any): PrenominaData {
+  const source = rawData ?? EMPTY_PRENOMINA;
+  const rawRows = Array.isArray(source.rows) ? source.rows : [];
+
+  return {
+    days: Array.isArray(source.days) ? source.days : [],
+    hours: Array.isArray(source.hours) ? source.hours : [],
+    rows: rawRows.map((row: any, index: number) => {
+      const codigo = String(
+        row.codigo ??
+          row.user_id ??
+          row.uid ??
+          row.employee_id ??
+          row.id ??
+          ""
+      ).trim();
+
+      const trabajador = String(
+        row.trabajador ??
+          row.name ??
+          row.nombre ??
+          row.employee_name ??
+          codigo ??
+          `Empleado ${index + 1}`
+      ).trim();
+
+      const incidentsSource = row.incidents ?? row.incidencias ?? {};
+      const incidents: Record<string, PrenominaIncident> = {};
+
+      Object.entries(incidentsSource).forEach(([fecha, value]: [string, any]) => {
+        if (!value) return;
+
+        incidents[fecha] = {
+          id: Number(value.id ?? 0),
+          user_id: String(value.user_id ?? codigo ?? trabajador),
+          fecha: String(value.fecha ?? fecha),
+          hora: String(value.hora ?? row.hora ?? ""),
+          incidencia: String(value.incidencia ?? value.type ?? ""),
+          descripcion: value.descripcion,
+        };
+      });
+
+      return {
+        area: String(row.area ?? row.department ?? row.departamento ?? ""),
+        trabajador: trabajador || codigo || `Empleado ${index + 1}`,
+        codigo: codigo || trabajador || `empleado-${index + 1}`,
+        hora: String(row.hora ?? row.hour ?? ""),
+        empresa: String(row.empresa ?? row.company ?? ""),
+        cells: row.cells ?? {},
+        incidents,
+      };
+    }),
+  };
+}
+
 function getFechaFromTimestamp(value: any) {
   const rawDate = String(value ?? "");
 
@@ -314,7 +369,7 @@ function AsistenciasPage() {
     if (vista === "prenomina") {
       cargarPrenomina();
     }
-  }, [vista, fechaInicio, fechaFin, prenominaEmpleadosSeleccionados]);
+  }, [vista, fechaInicio, fechaFin]);
 
   useEffect(() => {
     const target = pendingScrollIncidentRef.current;
@@ -518,12 +573,14 @@ function AsistenciasPage() {
   const cargarPrenomina = () => {
     if (!fechaInicio || !fechaFin) return Promise.resolve();
 
+    // Importante: la prenómina se consulta completa por rango y el filtro de
+    // empleados se aplica en el front. Así evitamos perder incidencias cuando
+    // el backend recibe un user_id que no coincide exactamente con el código
+    // visible del empleado.
     return timecoreApi
-      .getPrenomina(fechaInicio, fechaFin, {
-        userIds: prenominaEmpleadosSeleccionados,
-      })
+      .getPrenomina(fechaInicio, fechaFin)
       .then((res) => {
-        setPrenomina(res.data ?? EMPTY_PRENOMINA);
+        setPrenomina(normalizePrenominaData(res.data));
       })
       .catch((err) => {
         console.error("Error cargando prenomina:", err);
@@ -656,13 +713,33 @@ function AsistenciasPage() {
   });
 
   const prenominaRows = useMemo(() => {
+    if (prenominaEmpleadosSeleccionados.length === 0) {
+      return prenomina.rows;
+    }
+
+    const selectedCodes = new Set(
+      prenominaEmpleadosSeleccionados.map((value) => String(value).trim())
+    );
+
+    const selectedNames = new Set(
+      empleados
+        .filter((item) => selectedCodes.has(item.codigo))
+        .map((item) => item.nombre.trim().toLowerCase())
+    );
+
     return prenomina.rows.filter((row) => {
-      const mE =
-        prenominaEmpleadosSeleccionados.length === 0 ||
-        prenominaEmpleadosSeleccionados.includes(row.codigo);
-      return mE;
+      const rowCode = String(row.codigo ?? "").trim();
+      const rowName = String(row.trabajador ?? "").trim().toLowerCase();
+
+      if (selectedCodes.has(rowCode)) return true;
+      if (selectedNames.has(rowName)) return true;
+
+      return Object.values(row.incidents ?? {}).some((incident) => {
+        const incidentUserId = String(incident?.user_id ?? "").trim();
+        return selectedCodes.has(incidentUserId);
+      });
     });
-  }, [prenomina.rows, prenominaEmpleadosSeleccionados]);
+  }, [prenomina.rows, prenominaEmpleadosSeleccionados, empleados]);
 
   const empleadosVisiblesPrenomina = useMemo(() => {
     return prenominaEmpleadosSeleccionados.length === 0
@@ -1041,16 +1118,18 @@ function EmployeeMultiSelect({
       ? "Todos"
       : selected.length === 1
         ? empleados.find((empleado) => empleado.codigo === selected[0])?.nombre ??
-          "1 empleado"
+          selected[0]
         : `${selected.length} empleados seleccionados`;
 
   const toggleEmployee = (codigo: string) => {
-    if (selectedSet.has(codigo)) {
-      onChange(selected.filter((value) => value !== codigo));
+    const normalizedCodigo = String(codigo).trim();
+
+    if (selectedSet.has(normalizedCodigo)) {
+      onChange(selected.filter((value) => value !== normalizedCodigo));
       return;
     }
 
-    onChange([...selected, codigo]);
+    onChange([...selected, normalizedCodigo]);
   };
 
   return (
@@ -1143,9 +1222,9 @@ function TablaPrenomina({
         </thead>
 
         <tbody>
-          {rows.map((row) => (
+          {rows.map((row, rowIndex) => (
             <tr
-              key={`${row.codigo}-${row.hora}`}
+              key={`${row.codigo}-${row.hora}-${rowIndex}`}
               className="hover:bg-muted/30 transition-colors"
             >
               <td className="border border-border px-3 py-2">{row.area}</td>
