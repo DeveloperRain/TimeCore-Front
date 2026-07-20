@@ -8,27 +8,40 @@ import {
   LayoutDashboard,
   Users,
   ClipboardList,
-  Fingerprint,
   Building2,
   LogOut,
   Clock,
 } from "lucide-react";
 import { authStorage } from "@/lib/api/timecore";
-import logoHorizontal from "@/assets/timecore-logo-horizontal.png.asset.json";
 import timeCoreLogo from "@/imgs/TIMECORE_LOGO_Blanco.png";
 
 const generalItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, preserveBranch: true },
   { title: "Relojes", url: "/relojes", icon: Clock, preserveBranch: true },
-  { title: "Sucursales", url: "/sucursales", icon: Building2, preserveBranch: false },
+  {
+    title: "Sucursales",
+    url: "/sucursales",
+    icon: Building2,
+    preserveBranch: false,
+  },
 ];
 
 const branchItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, preserveBranch: true },
   { title: "Empleados", url: "/empleados", icon: Users, preserveBranch: true },
-  { title: "Asistencias", url: "/asistencias", icon: ClipboardList, preserveBranch: true },
+  {
+    title: "Asistencias",
+    url: "/asistencias",
+    icon: ClipboardList,
+    preserveBranch: true,
+  },
   { title: "Relojes", url: "/relojes", icon: Clock, preserveBranch: true },
-  { title: "Sucursales", url: "/sucursales", icon: Building2, preserveBranch: false },
+  {
+    title: "Sucursales",
+    url: "/sucursales",
+    icon: Building2,
+    preserveBranch: false,
+  },
 ];
 
 type AppSidebarProps = {
@@ -85,26 +98,27 @@ export function AppSidebar({
         <button
           type="button"
           onClick={onToggleCollapsed}
-          title={collapsed ? "Mostrar menu" : "Ocultar menu"}
-          aria-label={collapsed ? "Mostrar menu" : "Ocultar menu"}
-          className="flex items-center justify-center rounded-lg transition-transform hover:scale-105 active:scale-95 bg-white p-1"
+          title={collapsed ? "Mostrar menú" : "Ocultar menú"}
+          aria-label={collapsed ? "Mostrar menú" : "Ocultar menú"}
+          className="flex shrink-0 items-center justify-center rounded-lg bg-white p-1 transition-transform hover:scale-105 active:scale-95"
         >
-          {collapsed ? (
-            <img
-              src={timeCoreLogo}
-              alt="TimeCore"
-              className="h-12 w-12 object-contain"
-            />
-          )
-          
-          : (
-            <img
-              src={timeCoreLogo}
-              alt="TimeCore"
-              className="h-12 w-auto object-contain"
-            />
-          )}
+          <img
+            src={timeCoreLogo}
+            alt="TimeCore"
+            className={collapsed ? "h-13 w-13 object-contain" : "h-10 w-10 object-contain"}
+          />
         </button>
+
+        {!collapsed && (
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-lg font-bold tracking-[0.08em] text-white">
+              TIMECORE
+            </p>
+            <p className="mt-1 truncate text-xs font-medium text-white/75">
+              Control de asistencia
+            </p>
+          </div>
+        )}
       </div>
 
       {!collapsed && (
@@ -142,7 +156,7 @@ export function AppSidebar({
             <button
               type="button"
               onClick={handleSignOut}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
               <LogOut className="h-4 w-4 shrink-0" />
               <span className="truncate">Cerrar sesión</span>

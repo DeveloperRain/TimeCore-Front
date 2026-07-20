@@ -1204,9 +1204,6 @@ function TablaPrenomina({
             <th className="border border-border px-3 py-2 text-left font-semibold">
               Trabajador
             </th>
-            <th className="border border-border px-3 py-2 text-left font-semibold">
-              Hora
-            </th>
             {days.map((day) => (
               <th
                 key={day.date}
@@ -1230,9 +1227,6 @@ function TablaPrenomina({
               <td className="border border-border px-3 py-2">{row.area}</td>
               <td className="border border-border px-3 py-2 font-medium">
                 {row.trabajador}
-              </td>
-              <td className="border border-border px-3 py-2 font-mono">
-                {row.hora}
               </td>
               {days.map((day) => {
                 const value = row.cells[day.date] ?? "";
@@ -1300,7 +1294,7 @@ function TablaPrenomina({
           {rows.length === 0 && (
             <tr>
               <td
-                colSpan={days.length + 4}
+                colSpan={days.length + 3}
                 className="border border-border px-5 py-10 text-center text-muted-foreground"
               >
                 {hasSelectedEmployee

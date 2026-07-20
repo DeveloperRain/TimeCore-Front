@@ -3,7 +3,6 @@ import { AppShell } from "@/components/AppShell";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { timecoreApi } from "@/lib/api/timecore";
 import {
-  ArrowLeft,
   Plug,
   RefreshCw,
   Wifi,
@@ -352,28 +351,6 @@ function RelojesPage() {
       });
   };
 
-  const eliminarReloj = (id: number) => {
-    const confirmar = window.confirm("¿Seguro que quieres desactivar este reloj?");
-
-    if (!confirmar) return;
-
-    timecoreApi
-      .eliminarDevice(id)
-      .then(() => cargarRelojes())
-      .catch((err) => console.error("Error desactivando reloj:", err));
-  };
-
-  const activarReloj = (id: number) => {
-    const confirmar = window.confirm("¿Seguro que quieres activar este reloj?");
-
-    if (!confirmar) return;
-
-    timecoreApi
-      .activarDevice(id)
-      .then(() => cargarRelojes())
-      .catch((err) => console.error("Error activando reloj:", err));
-  };
-
   const sincronizarReloj = (id: number) => {
     setSyncingId(id);
 
@@ -383,7 +360,10 @@ function RelojesPage() {
         const data = res.data ?? {};
         const ip = data.ip ?? relojes.find((reloj) => reloj.id === id)?.ip ?? "";
         const obtainedEvents =
-          data.attendance_obtained ?? data.events_obtained ?? data.attendance_synced ?? 0;
+          data.attendance_obtained ??
+          data.events_obtained ??
+          data.attendance_synced ??
+          0;
         const downloadedEvents =
           data.attendance_synced ?? data.events_downloaded ?? 0;
 
@@ -398,7 +378,7 @@ function RelojesPage() {
           },
           {
             time: getCurrentTime(),
-            message: `Datos en el reloj:  ${obtainedEvents} Datos`,
+            message: `Datos en el reloj: ${obtainedEvents} Datos`,
           },
           {
             time: getCurrentTime(),
@@ -418,8 +398,6 @@ function RelojesPage() {
   };
 
   const totalRelojes = relojes.length;
-
-  const inactivos = relojes.filter((r) => !r.activo).length;
 
   const conectados = relojes.filter(
     (r) => r.activo && r.estado === "Conectado"
@@ -477,7 +455,7 @@ function RelojesPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <StatCard
           label="Total de relojes"
           value={totalRelojes}
@@ -497,13 +475,6 @@ function RelojesPage() {
           value={desconectados}
           accent="bg-destructive/10 text-destructive"
           icon={WifiOff}
-        />
-
-        <StatCard
-          label="Inactivos"
-          value={inactivos}
-          accent="bg-muted/10 text-muted-foreground"
-          icon={Plug}
         />
       </div>
 
@@ -554,7 +525,7 @@ function RelojesPage() {
                 <th className="text-left font-semibold px-5 py-3">
                   Próxima sincronización
                 </th>
-                <th className="text-right font-semibold px-5 py-3">Acciones</th>
+               
               </tr>
             </thead>
 
@@ -610,7 +581,7 @@ function RelojesPage() {
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button
-                        disabled={!r.activo}
+                        disabled={!r.activo || syncingId === r.id}
                         onClick={() => {
                           if (!r.activo) return;
                           sincronizarReloj(r.id);
@@ -638,24 +609,6 @@ function RelojesPage() {
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
-
-                      {r.activo ? (
-                        <button
-                          onClick={() => eliminarReloj(r.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          title="Desactivar"
-                        >
-                          <Plug className="h-4 w-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => activarReloj(r.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-success/10 hover:text-success"
-                          title="Activar"
-                        >
-                          <Plug className="h-4 w-4" />
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>

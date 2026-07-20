@@ -376,6 +376,19 @@ export const timecoreApi = {
       body: JSON.stringify(data),
     }),
 
+  actualizarUsuarioPorId: (
+    id: number,
+    data: {
+      user_id?: string;
+      name?: string;
+      role?: string;
+    }
+  ) =>
+    request(`/users/by-id/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
   actualizarUsuario: (
     uid: number,
     data: {
@@ -397,6 +410,31 @@ export const timecoreApi = {
   // =========================
   // PERFIL LOCAL DE EMPLEADO
   // =========================
+
+  actualizarPerfilEmpleadoPorId: (
+    id: number,
+    data: {
+      role?: string;
+      sucursal?: string;
+      email?: string;
+      area?: string;
+      empresa?: string;
+      branch_id?: number;
+    }
+  ) =>
+    request(`/db/users/by-id/${id}/profile`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  actualizarEstadoEmpleadoPorId: (
+    id: number,
+    status: "Activo" | "Inactivo"
+  ) =>
+    request(`/db/users/by-id/${id}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ status }),
+    }),
 
   actualizarPerfilEmpleado: (
     uid: number,

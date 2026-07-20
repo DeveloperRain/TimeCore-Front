@@ -45,9 +45,61 @@ export function AppShell({
 
   const [showSyncNoticeMessage, setShowSyncNoticeMessage] = useState(false);
   const [syncingAllDevices, setSyncingAllDevices] = useState(false);
-  const [syncLogRows, setSyncLogRows] = useState<SyncLogRow[]>([]);
-  const [syncLogTitle, setSyncLogTitle] = useState("Sincronización realizada con éxito");
-  const [showSyncLog, setShowSyncLog] = useState(false);
+  const [syncLogRows, setSyncLogRows] = useState<SyncLogRow[]>(() => {
+    if (typeof window === "undefined") return [];
+
+    const savedRows = window.localStorage.getItem("timecore-sync-log-rows");
+
+    if (!savedRows) return [];
+
+    try {
+      return JSON.parse(savedRows) as SyncLogRow[];
+    } catch {
+      return [];
+    }
+  });
+  const [syncLogTitle, setSyncLogTitle] = useState(() => {
+    if (typeof window === "undefined") {
+      return "Sincronización realizada con éxito";
+    }
+
+    return (
+      window.localStorage.getItem("timecore-sync-log-title") ??
+      "Sincronización realizada con éxito"
+    );
+  });
+  const [showSyncLog, setShowSyncLog] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("timecore-sync-log-visible") === "true";
+  });
+  const [syncLogPosition, setSyncLogPosition] = useState<NoticePosition>(() => {
+    if (typeof window === "undefined") {
+      return { x: 16, y: 560 };
+    }
+
+    const savedPosition = window.localStorage.getItem(
+      "timecore-sync-log-position"
+    );
+
+    if (!savedPosition) {
+      return {
+        x: 16,
+        y: Math.max(16, window.innerHeight - 220),
+      };
+    }
+
+    try {
+      return JSON.parse(savedPosition) as NoticePosition;
+    } catch {
+      return {
+        x: 16,
+        y: Math.max(16, window.innerHeight - 220),
+      };
+    }
+  });
+  const [isDraggingSyncLog, setIsDraggingSyncLog] = useState(false);
+  const syncLogDragOffsetRef = useRef<NoticePosition>({ x: 0, y: 0 });
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("timecore-sidebar-collapsed") === "true";
@@ -192,6 +244,80 @@ export function AppShell({
   }, [sidebarCollapsed]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem(
+      "timecore-sync-log-visible",
+      String(showSyncLog)
+    );
+  }, [showSyncLog]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem(
+      "timecore-sync-log-title",
+      syncLogTitle
+    );
+  }, [syncLogTitle]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem(
+      "timecore-sync-log-rows",
+      JSON.stringify(syncLogRows)
+    );
+  }, [syncLogRows]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem(
+      "timecore-sync-log-position",
+      JSON.stringify(syncLogPosition)
+    );
+  }, [syncLogPosition]);
+
+  useEffect(() => {
+    if (!isDraggingSyncLog) return;
+
+    function handleMouseMove(e: globalThis.MouseEvent) {
+      const logWidth = 360;
+      const logHeight = 190;
+
+      setSyncLogPosition({
+        x: Math.max(
+          8,
+          Math.min(
+            e.clientX - syncLogDragOffsetRef.current.x,
+            window.innerWidth - logWidth - 8
+          )
+        ),
+        y: Math.max(
+          8,
+          Math.min(
+            e.clientY - syncLogDragOffsetRef.current.y,
+            window.innerHeight - logHeight - 8
+          )
+        ),
+      });
+    }
+
+    function handleMouseUp() {
+      setIsDraggingSyncLog(false);
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDraggingSyncLog]);
+
+  useEffect(() => {
     if (!isDraggingNotice) return;
 
     function handleMouseMove(e: globalThis.MouseEvent) {
@@ -231,6 +357,25 @@ export function AppShell({
       JSON.stringify(noticePosition)
     );
   }, [noticePosition]);
+
+  function startDraggingSyncLog(e: MouseEvent<HTMLDivElement>) {
+    e.preventDefault();
+
+    syncLogDragOffsetRef.current = {
+      x: e.clientX - syncLogPosition.x,
+      y: e.clientY - syncLogPosition.y,
+    };
+
+    setIsDraggingSyncLog(true);
+  }
+
+  function closeSyncLog() {
+    setShowSyncLog(false);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("timecore-sync-log-visible", "false");
+    }
+  }
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -356,13 +501,25 @@ export function AppShell({
       )}
 
       {showSyncLog && (
-        <div className="fixed bottom-4 left-4 z-50 w-[360px] overflow-hidden rounded-md border border-border bg-card text-xs shadow-xl">
-          <div className="flex items-center justify-between border-b border-border bg-muted/70 px-3 py-1.5">
+        <div
+          className="fixed z-50 w-[360px] overflow-hidden rounded-md border border-border bg-card text-xs shadow-xl"
+          style={{
+            left: `${syncLogPosition.x}px`,
+            top: `${syncLogPosition.y}px`,
+          }}
+        >
+          <div
+            onMouseDown={startDraggingSyncLog}
+            className={`flex select-none items-center justify-between border-b border-border bg-muted/70 px-3 py-1.5 ${
+              isDraggingSyncLog ? "cursor-grabbing" : "cursor-grab"
+            }`}
+          >
             <p className="font-semibold text-foreground">{syncLogTitle}</p>
 
             <button
               type="button"
-              onClick={() => setShowSyncLog(false)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={closeSyncLog}
               className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               aria-label="Cerrar resumen de sincronizacion"
             >

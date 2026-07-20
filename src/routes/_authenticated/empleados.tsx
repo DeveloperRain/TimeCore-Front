@@ -301,9 +301,9 @@ function EmpleadosPage() {
         role: form.puesto,
       })
       .then(() =>
-        timecoreApi.actualizarPerfilEmpleado(editing.uid, profilePayload)
+        timecoreApi.actualizarPerfilEmpleadoPorId(editing.id, profilePayload)
       )
-      .then(() => timecoreApi.actualizarEstadoEmpleado(editing.uid, form.estado))
+      .then(() => timecoreApi.actualizarEstadoEmpleadoPorId(editing.id, form.estado))
       .then(() => {
         alert("Empleado actualizado con éxito");
         cargarEmpleados();
