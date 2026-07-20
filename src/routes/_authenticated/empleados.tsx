@@ -37,6 +37,7 @@ type SucursalOption = {
 
 type EmpleadoFront = {
   id: number;
+  uid: number;
   nombre: string;
   area: string;
   puesto: string;
@@ -165,7 +166,8 @@ function EmpleadosPage() {
         setTotalPages(Number(payload.pages ?? 1));
 
         const empleadosApi: EmpleadoFront[] = lista.map((u: any) => ({
-          id: Number(u.uid ?? u.id),
+          id: Number(u.id ?? u.uid),
+          uid: Number(u.uid ?? u.id),
           nombre: String(u.name ?? u.nombre ?? "Sin nombre"),
           area: String(u.area ?? u.department ?? u.departamento ?? ""),
           puesto: String(u.role ?? u.puesto ?? "usuario"),
@@ -229,7 +231,7 @@ function EmpleadosPage() {
     cargarSucursales();
     setEditing(e);
     setForm({
-      uid: String(e.id),
+      uid: String(e.uid),
       nombre: e.nombre,
       area: e.area,
       puesto: e.puesto,
@@ -294,14 +296,14 @@ function EmpleadosPage() {
     }
 
     timecoreApi
-      .actualizarUsuario(editing.id, {
+      .actualizarUsuario(editing.uid, {
         name: form.nombre,
         role: form.puesto,
       })
       .then(() =>
-        timecoreApi.actualizarPerfilEmpleado(editing.id, profilePayload)
+        timecoreApi.actualizarPerfilEmpleado(editing.uid, profilePayload)
       )
-      .then(() => timecoreApi.actualizarEstadoEmpleado(editing.id, form.estado))
+      .then(() => timecoreApi.actualizarEstadoEmpleado(editing.uid, form.estado))
       .then(() => {
         alert("Empleado actualizado con éxito");
         cargarEmpleados();
@@ -313,10 +315,34 @@ function EmpleadosPage() {
       });
   };
 
-  const filtered = empleados.filter((e) => {
-    const matchS = !filterSucursal || e.sucursal === filterSucursal;
-    return matchS;
-  });
+  const filtered = useMemo(() => {
+    const normalizedQuery = query.toLowerCase().trim();
+
+    return empleados.filter((e) => {
+      const matchSucursal =
+        !filterSucursal || e.sucursal === filterSucursal;
+
+      const matchEstado =
+        !filterEstado || e.estado === filterEstado;
+
+      const searchableText = [
+        e.nombre,
+        e.area,
+        e.puesto,
+        e.sucursal,
+        e.email,
+        e.empresa,
+        String(e.uid),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      const matchQuery =
+        !normalizedQuery || searchableText.includes(normalizedQuery);
+
+      return matchSucursal && matchEstado && matchQuery;
+    });
+  }, [empleados, query, filterSucursal, filterEstado]);
 
   const subtitle = loading
     ? "Cargando empleados..."
@@ -428,7 +454,10 @@ function EmpleadosPage() {
 
             <tbody className="divide-y divide-border">
               {filtered.map((e) => (
-                <tr key={e.id} className="hover:bg-muted/40 transition-colors">
+                <tr
+                  key={`${e.id}-${e.uid}-${e.empresa}`}
+                  className="hover:bg-muted/40 transition-colors"
+                >
                   <td className="px-5 py-3 text-foreground">
                     {e.area || ""}
                   </td>
