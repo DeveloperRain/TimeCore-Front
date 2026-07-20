@@ -11,6 +11,7 @@ import {
   Fingerprint,
   Building2,
   LogOut,
+  Clock,
 } from "lucide-react";
 import { authStorage } from "@/lib/api/timecore";
 import logoHorizontal from "@/assets/timecore-logo-horizontal.png.asset.json";
@@ -18,7 +19,7 @@ import timeCoreLogo from "@/imgs/TIMECORE_LOGO_Blanco.png";
 
 const generalItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, preserveBranch: true },
-  { title: "Relojes", url: "/relojes", icon: Fingerprint, preserveBranch: true },
+  { title: "Relojes", url: "/relojes", icon: Clock, preserveBranch: true },
   { title: "Sucursales", url: "/sucursales", icon: Building2, preserveBranch: false },
 ];
 
@@ -26,7 +27,7 @@ const branchItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, preserveBranch: true },
   { title: "Empleados", url: "/empleados", icon: Users, preserveBranch: true },
   { title: "Asistencias", url: "/asistencias", icon: ClipboardList, preserveBranch: true },
-  { title: "Relojes", url: "/relojes", icon: Fingerprint, preserveBranch: true },
+  { title: "Relojes", url: "/relojes", icon: Clock, preserveBranch: true },
   { title: "Sucursales", url: "/sucursales", icon: Building2, preserveBranch: false },
 ];
 
@@ -94,7 +95,9 @@ export function AppSidebar({
               alt="TimeCore"
               className="h-12 w-12 object-contain"
             />
-          ) : (
+          )
+          
+          : (
             <img
               src={timeCoreLogo}
               alt="TimeCore"
