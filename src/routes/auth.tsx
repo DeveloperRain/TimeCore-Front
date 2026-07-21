@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, Fingerprint, Loader2 } from "lucide-react";
 import { authStorage, timecoreApi } from "@/lib/api/timecore";
+import timeCoreLogo from "@/imgs/TIMECORE_LOGO_Blanco.png";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -91,7 +92,11 @@ function AuthPage() {
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="h-10 w-10 rounded-md bg-primary flex items-center justify-center">
-            <Fingerprint className="h-5 w-5 text-primary-foreground" />
+            <img
+              src={timeCoreLogo}
+              alt="TimeCore"
+              className="h-9 w-9 object-contain"
+            />
           </div>
 
           <h1 className="text-2xl font-bold text-foreground">TimeCore</h1>

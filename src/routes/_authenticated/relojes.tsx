@@ -120,11 +120,11 @@ function RelojesPage() {
   useEffect(() => {
     const initialTimer = window.setTimeout(() => {
       if (!document.hidden) actualizarEstadosRelojes();
-    }, 600);
+    }, 300);
 
     const interval = window.setInterval(() => {
       if (!document.hidden) actualizarEstadosRelojes();
-    }, 30000);
+    }, 5000);
 
     return () => {
       window.clearTimeout(initialTimer);
