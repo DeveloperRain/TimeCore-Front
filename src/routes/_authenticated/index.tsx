@@ -4,13 +4,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import {
   Users,
-  Fingerprint,
-  ClipboardCheck,
   Building2,
   TrendingUp,
   Activity,
-  ArrowLeft,
-  RefreshCw,
+  Clock,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/")({
@@ -321,19 +318,13 @@ function Dashboard() {
         label: "Relojes conectados",
         value: `${relojesConectados} / ${totalRelojes}`,
         delta: relojesConectados > 0 ? "Conexión activa" : "Sin conexión",
-        icon: Fingerprint,
+        icon: Clock,
         accent:
           relojesConectados > 0
             ? "bg-success/10 text-success"
             : "bg-destructive/10 text-destructive",
       },
-      {
-        label: "Asistencias Totales registradas",
-        value: String(totalAsistencias),
-        delta: isBranchMode ? "Registros de esta sucursal" : "Registros del reloj",
-        icon: ClipboardCheck,
-        accent: "bg-chart-2/10 text-chart-2",
-      },
+      
       {
         label: isBranchMode ? "Estado de sucursal" : "Sucursales activas",
         value: isBranchMode
@@ -450,12 +441,6 @@ function Dashboard() {
             Asistencias por día
           </h3>
 
-          <p className="text-xs text-muted-foreground">
-            {isBranchMode
-              ? "Registros reales de la semana actual para esta sucursal"
-              : "Registros reales de la semana actual"}
-          </p>
-
           <div className="mt-6 flex h-56 items-end justify-between gap-3">
             {barData.map((b) => {
               const height =
@@ -491,7 +476,7 @@ function Dashboard() {
           </h3>
 
           <p className="text-xs text-muted-foreground mb-5">
-            {isBranchMode ? "Distribución filtrada" : "Distribución actual"}
+            {isBranchMode ? "Filtrado por Sucursal" : "Distribución actual"}
           </p>
 
           <div className="space-y-4">

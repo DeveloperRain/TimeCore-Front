@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Fingerprint, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { authStorage, timecoreApi } from "@/lib/api/timecore";
 import timeCoreLogo from "@/imgs/TIMECORE_LOGO_Blanco.png";
 
@@ -39,6 +39,19 @@ function AuthPage() {
     }
   }, [navigate]);
 
+  function changeMode(nextMode: "signin" | "signup") {
+    setMode(nextMode);
+    setError(null);
+    setInfo(null);
+    setShowPassword(false);
+
+    if (nextMode === "signup") {
+      setFullName("");
+      setEmail("");
+      setPassword("");
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -54,6 +67,7 @@ function AuthPage() {
         });
 
         authStorage.saveSession(res.data);
+
         navigate({
           to: "/",
           search: {
@@ -69,6 +83,8 @@ function AuthPage() {
 
         setInfo("Cuenta creada. Ya puedes iniciar sesión.");
         setMode("signin");
+        setFullName("");
+        setEmail("");
         setPassword("");
         setShowPassword(false);
       }
@@ -106,13 +122,11 @@ function AuthPage() {
           <div className="flex gap-2 mb-6 p-1 rounded-md bg-muted">
             <button
               type="button"
-              onClick={() => {
-                setMode("signin");
-                setError(null);
-                setInfo(null);
-              }}
+              onClick={() => changeMode("signin")}
               className={`flex-1 py-2 text-sm font-medium rounded ${
-                mode === "signin" ? "bg-card shadow-sm" : "text-muted-foreground"
+                mode === "signin"
+                  ? "bg-card shadow-sm"
+                  : "text-muted-foreground"
               }`}
             >
               Iniciar sesión
@@ -120,28 +134,34 @@ function AuthPage() {
 
             <button
               type="button"
-              onClick={() => {
-                setMode("signup");
-                setError(null);
-                setInfo(null);
-              }}
+              onClick={() => changeMode("signup")}
               className={`flex-1 py-2 text-sm font-medium rounded ${
-                mode === "signup" ? "bg-card shadow-sm" : "text-muted-foreground"
+                mode === "signup"
+                  ? "bg-card shadow-sm"
+                  : "text-muted-foreground"
               }`}
             >
               Crear cuenta
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form
+            key={mode}
+            onSubmit={handleSubmit}
+            className="space-y-4"
+            autoComplete={mode === "signup" ? "off" : "on"}
+          >
             {mode === "signup" && (
               <div>
                 <label className="text-sm font-medium text-foreground">
                   Nombre completo
                 </label>
+
                 <input
                   type="text"
                   required
+                  name="timecore-new-full-name"
+                  autoComplete="name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
@@ -153,9 +173,16 @@ function AuthPage() {
               <label className="text-sm font-medium text-foreground">
                 Correo
               </label>
+
               <input
                 type="email"
                 required
+                name={
+                  mode === "signup"
+                    ? "timecore-new-account-email"
+                    : "timecore-login-email"
+                }
+                autoComplete={mode === "signup" ? "off" : "username"}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
@@ -172,6 +199,14 @@ function AuthPage() {
                   type={showPassword ? "text" : "password"}
                   required
                   minLength={6}
+                  name={
+                    mode === "signup"
+                      ? "timecore-new-account-password"
+                      : "timecore-login-password"
+                  }
+                  autoComplete={
+                    mode === "signup" ? "new-password" : "current-password"
+                  }
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary"
@@ -181,7 +216,9 @@ function AuthPage() {
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
                   className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
-                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={
+                    showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                  }
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
