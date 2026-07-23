@@ -923,25 +923,6 @@ function AsistenciasPage() {
                   ))}
                 </select>
 
-                <select
-                  value={incidenciaForm.hora}
-                  onChange={(e) =>
-                    setIncidenciaForm((current) => ({
-                      ...current,
-                      hora: e.target.value,
-                    }))
-                  }
-                  className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  {(prenomina.hours.length > 0
-                    ? prenomina.hours
-                    : Array.from({ length: 13 }, (_, index) => `${String(index + 6).padStart(2, "0")}:00`)
-                  ).map((hora) => (
-                    <option key={hora} value={hora}>
-                      {hora}
-                    </option>
-                  ))}
-                </select>
 
                 <input
                   value={incidenciaForm.incidencia}
