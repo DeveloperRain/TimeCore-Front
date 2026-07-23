@@ -1273,9 +1273,12 @@ function TablaPrenomina({
                   </td>
                 );
               })}
-              <td className="border border-border px-3 py-2">{row.empresa}</td>
+              <td className="border border-border px-3 py-2">
+                {sameAsPrev ? "" : row.empresa}
+              </td>
             </tr>
-          ))}
+            );
+          })}
 
           {rows.length === 0 && (
             <tr>
