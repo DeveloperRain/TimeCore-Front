@@ -212,11 +212,13 @@ export const timecoreApi = {
   },
 
   guardarIncidenciaPrenomina: (data: {
+    id?: number;
     user_id: string;
     fecha: string;
     hora: string;
     incidencia: string;
     descripcion?: string;
+    color?: string;
   }) =>
     request("/db/prenomina/incidencias", {
       method: "POST",

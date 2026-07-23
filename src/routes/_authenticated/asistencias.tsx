@@ -65,6 +65,10 @@ type PrenominaIncident = {
   hora: string;
   incidencia: string;
   descripcion?: string;
+  color: string;
+  source_fecha?: string;
+  source_hora?: string;
+  moved_attendance?: string;
 };
 
 type PrenominaRow = {
@@ -89,6 +93,10 @@ type IncidenciaForm = {
   fecha: string;
   hora: string;
   incidencia: string;
+  color: string;
+  original_user_id?: string;
+  original_fecha?: string;
+  original_hora?: string;
 };
 
 const EMPTY_PRENOMINA: PrenominaData = {
@@ -136,6 +144,10 @@ function normalizePrenominaData(rawData: any): PrenominaData {
           hora: String(value.hora ?? row.hora ?? ""),
           incidencia: String(value.incidencia ?? value.type ?? ""),
           descripcion: value.descripcion,
+          color: String(value.color ?? "#BAE6FD"),
+          source_fecha: value.source_fecha ? String(value.source_fecha) : undefined,
+          source_hora: value.source_hora ? String(value.source_hora) : undefined,
+          moved_attendance: value.moved_attendance ? String(value.moved_attendance) : undefined,
         };
       });
 
@@ -254,6 +266,18 @@ function getEndDateFromStart(startDate: string) {
   return toDateInputValue(addDays(date, 7));
 }
 
+function getMaxEndDateFromStart(startDate: string) {
+  const date = parseLocalDate(startDate);
+
+  if (!date) {
+    return getDefaultEndDate();
+  }
+
+  // Máximo 62 días incluyendo la fecha inicial:
+  // primera página 31 días y segunda página otros 31 días.
+  return toDateInputValue(addDays(date, 61));
+}
+
 function formatSpanishDate(value: string) {
   const date = parseLocalDate(value);
 
@@ -309,6 +333,10 @@ function getDefaultIncidenciaForm(): IncidenciaForm {
     fecha: getDefaultStartDate(),
     hora: "06:00",
     incidencia: "",
+    color: "#BAE6FD",
+    original_user_id: undefined,
+    original_fecha: undefined,
+    original_hora: undefined,
   };
 }
 
@@ -338,7 +366,9 @@ function AsistenciasPage() {
   const [attendancePage, setAttendancePage] = useState(1);
   const [attendanceTotal, setAttendanceTotal] = useState(0);
   const [attendancePages, setAttendancePages] = useState(1);
+  const [prenominaPage, setPrenominaPage] = useState(1);
   const ATTENDANCE_PAGE_SIZE = 50;
+  const PRENOMINA_DAYS_PER_PAGE = 31;
   const incidenciaFormRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollIncidentRef = useRef<{
     userId: string;
@@ -364,6 +394,14 @@ function AsistenciasPage() {
   useEffect(() => {
     setAttendancePage(1);
   }, [fechaInicio, fechaFin]);
+
+  useEffect(() => {
+    setPrenominaPage(1);
+  }, [
+    fechaInicio,
+    fechaFin,
+    prenominaEmpleadosSeleccionados,
+  ]);
 
   useEffect(() => {
     if (vista === "prenomina") {
@@ -454,8 +492,47 @@ function AsistenciasPage() {
 
   const cambiarFechaInicio = (value: string) => {
     setFechaInicio(value);
-    setFechaFin(getEndDateFromStart(value));
+
+    const currentEnd = parseLocalDate(fechaFin);
+    const nextStart = parseLocalDate(value);
+    const maxEnd = parseLocalDate(getMaxEndDateFromStart(value));
+
+    if (
+      !currentEnd ||
+      !nextStart ||
+      !maxEnd ||
+      currentEnd < nextStart ||
+      currentEnd > maxEnd
+    ) {
+      setFechaFin(getEndDateFromStart(value));
+    }
+
     setIncidenciaForm((current) => ({ ...current, fecha: value }));
+  };
+
+  const cambiarFechaFin = (value: string) => {
+    const start = parseLocalDate(fechaInicio);
+    const end = parseLocalDate(value);
+    const maxEnd = parseLocalDate(getMaxEndDateFromStart(fechaInicio));
+
+    if (!start || !end || !maxEnd) {
+      setFechaFin(value);
+      return;
+    }
+
+    if (end < start) {
+      window.alert("La fecha final no puede ser anterior a la fecha inicial.");
+      setFechaFin(fechaInicio);
+      return;
+    }
+
+    if (end > maxEnd) {
+      window.alert("La prenómina permite consultar un máximo de 2 meses o 62 días.");
+      setFechaFin(getMaxEndDateFromStart(fechaInicio));
+      return;
+    }
+
+    setFechaFin(value);
   };
 
   const cargarSucursales = () => {
@@ -613,18 +690,25 @@ function AsistenciasPage() {
 
     setSavingIncident(true);
 
-    timecoreApi
-      .guardarIncidenciaPrenomina({
-        user_id: empleadoObjetivo,
-        fecha: incidenciaForm.fecha,
-        hora: incidenciaForm.hora,
-        incidencia: incidenciaForm.incidencia,
-      })
+    const request = timecoreApi.guardarIncidenciaPrenomina({
+      id: incidenciaForm.id,
+      user_id: empleadoObjetivo,
+      fecha: incidenciaForm.fecha,
+      hora: incidenciaForm.hora,
+      incidencia: incidenciaForm.incidencia,
+      color: incidenciaForm.color,
+    });
+
+    request
       .then(() => {
         setIncidenciaForm((current) => ({
           ...current,
           id: undefined,
           incidencia: "",
+          color: "#BAE6FD",
+          original_user_id: undefined,
+          original_fecha: undefined,
+          original_hora: undefined,
         }));
 
         return cargarPrenomina();
@@ -665,6 +749,10 @@ function AsistenciasPage() {
       fecha: day.date,
       hora: row.hora,
       incidencia: incident?.incidencia ?? "",
+      color: incident?.color ?? "#BAE6FD",
+      original_user_id: incident?.user_id,
+      original_fecha: incident?.fecha,
+      original_hora: incident?.hora,
     });
 
     window.setTimeout(() => {
@@ -680,6 +768,7 @@ function AsistenciasPage() {
       ...current,
       id: undefined,
       incidencia: "",
+      color: "#BAE6FD",
       }));
   };
 
@@ -713,33 +802,106 @@ function AsistenciasPage() {
   });
 
   const prenominaRows = useMemo(() => {
+  const selectedCodes = new Set(
+    prenominaEmpleadosSeleccionados.map((value) => String(value).trim())
+  );
+
+  const selectedNames = new Set(
+    empleados
+      .filter((item) => selectedCodes.has(item.codigo))
+      .map((item) => item.nombre.trim().toLowerCase())
+  );
+
+  const rowsFiltradas = prenomina.rows.filter((row) => {
     if (prenominaEmpleadosSeleccionados.length === 0) {
-      return prenomina.rows;
+      return true;
     }
 
-    const selectedCodes = new Set(
-      prenominaEmpleadosSeleccionados.map((value) => String(value).trim())
-    );
+    const rowCode = String(row.codigo ?? "").trim();
+    const rowName = String(row.trabajador ?? "").trim().toLowerCase();
 
-    const selectedNames = new Set(
-      empleados
-        .filter((item) => selectedCodes.has(item.codigo))
-        .map((item) => item.nombre.trim().toLowerCase())
-    );
+    if (selectedCodes.has(rowCode)) return true;
+    if (selectedNames.has(rowName)) return true;
 
-    return prenomina.rows.filter((row) => {
-      const rowCode = String(row.codigo ?? "").trim();
-      const rowName = String(row.trabajador ?? "").trim().toLowerCase();
-
-      if (selectedCodes.has(rowCode)) return true;
-      if (selectedNames.has(rowName)) return true;
-
-      return Object.values(row.incidents ?? {}).some((incident) => {
-        const incidentUserId = String(incident?.user_id ?? "").trim();
-        return selectedCodes.has(incidentUserId);
-      });
+    return Object.values(row.incidents ?? {}).some((incident) => {
+      const incidentUserId = String(incident?.user_id ?? "").trim();
+      return selectedCodes.has(incidentUserId);
     });
-  }, [prenomina.rows, prenominaEmpleadosSeleccionados, empleados]);
+  });
+
+  const empleadosAgrupados = new Map<string, PrenominaRow>();
+
+  rowsFiltradas.forEach((row) => {
+    /*
+     * El código identifica al empleado. Incluimos empresa para evitar mezclar
+     * empleados de relojes o empresas diferentes que tengan el mismo código.
+     */
+    const employeeKey = `${String(row.codigo).trim()}__${String(
+      row.empresa
+    ).trim()}`;
+
+    const existente = empleadosAgrupados.get(employeeKey);
+
+    if (!existente) {
+      empleadosAgrupados.set(employeeKey, {
+        area: row.area,
+        trabajador: row.trabajador,
+        codigo: row.codigo,
+        hora: row.hora || "06:00",
+        empresa: row.empresa,
+        cells: { ...row.cells },
+        incidents: { ...row.incidents },
+      });
+
+      return;
+    }
+
+    Object.entries(row.cells ?? {}).forEach(([fecha, value]) => {
+      const nuevoValor = String(value ?? "").trim();
+
+      if (!nuevoValor) return;
+
+      const valorActual = String(existente.cells[fecha] ?? "").trim();
+
+      if (!valorActual) {
+        existente.cells[fecha] = nuevoValor;
+        return;
+      }
+
+      const valoresActuales = valorActual
+        .split(" | ")
+        .map((item) => item.trim());
+
+      if (!valoresActuales.includes(nuevoValor)) {
+        existente.cells[fecha] = `${valorActual} | ${nuevoValor}`;
+      }
+    });
+
+    Object.entries(row.incidents ?? {}).forEach(([fecha, incident]) => {
+      if (!existente.incidents[fecha] && incident) {
+        existente.incidents[fecha] = incident;
+      }
+    });
+
+    if (!existente.area && row.area) {
+      existente.area = row.area;
+    }
+
+    if (!existente.empresa && row.empresa) {
+      existente.empresa = row.empresa;
+    }
+
+    if (!existente.hora && row.hora) {
+      existente.hora = row.hora;
+    }
+  });
+
+  return Array.from(empleadosAgrupados.values()).sort((a, b) =>
+    a.trabajador.localeCompare(b.trabajador, "es", {
+      sensitivity: "base",
+    })
+  );
+}, [prenomina.rows, prenominaEmpleadosSeleccionados, empleados]);
 
   const empleadosVisiblesPrenomina = useMemo(() => {
     return prenominaEmpleadosSeleccionados.length === 0
@@ -758,6 +920,22 @@ function AsistenciasPage() {
       ? prenomina.days
       : getPrenominaDays(fechaInicio, fechaFin);
   }, [prenomina.days, fechaInicio, fechaFin]);
+
+  const prenominaTotalPages = Math.max(
+    1,
+    Math.ceil(prenominaDays.length / PRENOMINA_DAYS_PER_PAGE)
+  );
+
+  const prenominaDaysPaginados = useMemo(() => {
+    const start = (prenominaPage - 1) * PRENOMINA_DAYS_PER_PAGE;
+    return prenominaDays.slice(start, start + PRENOMINA_DAYS_PER_PAGE);
+  }, [prenominaDays, prenominaPage]);
+
+  useEffect(() => {
+    if (prenominaPage > prenominaTotalPages) {
+      setPrenominaPage(prenominaTotalPages);
+    }
+  }, [prenominaPage, prenominaTotalPages]);
 
   const sucursalesEnVista = Array.from(
     new Set(
@@ -831,7 +1009,7 @@ function AsistenciasPage() {
               <label className="text-xs text-muted-foreground">
                 Hasta fecha
               </label>
-              <SpanishDatePicker value={fechaFin} onChange={setFechaFin} />
+              <SpanishDatePicker value={fechaFin} onChange={cambiarFechaFin} />
             </div>
 
             <div className="space-y-1.5">
@@ -880,7 +1058,7 @@ function AsistenciasPage() {
                 {incidenciaForm.id ? "Editar incidencia" : "Agregar incidencia"}
               </p>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
                 {empleadosVisiblesPrenomina.length === 1 ? (
                   <div className="flex items-center rounded-md border border-input bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">
                     {empleadoSeleccionado?.nombre ?? "Empleado seleccionado"}
@@ -937,6 +1115,25 @@ function AsistenciasPage() {
                 />
 
 
+                <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
+                  <input
+                    type="color"
+                    value={incidenciaForm.color}
+                    onChange={(e) =>
+                      setIncidenciaForm((current) => ({
+                        ...current,
+                        color: e.target.value.toUpperCase(),
+                      }))
+                    }
+                    className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0"
+                    title="Color de la incidencia"
+                    aria-label="Color de la incidencia"
+                  />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Color
+                  </span>
+                </div>
+
                 <button
                   type="button"
                   disabled={savingIncident}
@@ -966,9 +1163,13 @@ function AsistenciasPage() {
           />
         ) : (
           <TablaPrenomina
-            days={prenominaDays}
+            days={prenominaDaysPaginados}
             rows={prenominaRows}
             hasSelectedEmployee={empleadosVisiblesPrenomina.length > 0}
+            page={prenominaPage}
+            pages={prenominaTotalPages}
+            total={prenominaDays.length}
+            onPageChange={setPrenominaPage}
             onSelectCell={seleccionarCeldaPrenomina}
             onDeleteIncident={borrarIncidencia}
             highlightedCell={highlightedCell}
@@ -1166,6 +1367,10 @@ function TablaPrenomina({
   onSelectCell,
   onDeleteIncident,
   highlightedCell,
+  page,
+  pages,
+  total,
+  onPageChange,
 }: {
   days: PrenominaDay[];
   rows: PrenominaRow[];
@@ -1173,6 +1378,10 @@ function TablaPrenomina({
   onSelectCell: (row: PrenominaRow, day: PrenominaDay) => void;
   onDeleteIncident: (incidentId: number) => void;
   highlightedCell: string | null;
+  page: number;
+  pages: number;
+  total: number;
+  onPageChange: (page: number) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -1218,6 +1427,20 @@ function TablaPrenomina({
                 const value = row.cells[day.date] ?? "";
                 const incident = row.incidents[day.date];
                 const hasIncident = Boolean(incident);
+                const cleanValue = String(value ?? "").trim();
+                const incidentLabel = String(
+                  incident?.incidencia ?? "Incidencia"
+                ).trim();
+
+                const dateTimeLines = Array.from(
+                  new Set(
+                    cleanValue.match(
+                      /(?:\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2})\s+\d{1,2}:\d{2}/g
+                    ) ?? []
+                  )
+                );
+
+                const isEmptyCell = !cleanValue && !hasIncident;
                 const cellKey = getPrenominaCellKey(
                   row.codigo,
                   row.hora,
@@ -1234,26 +1457,77 @@ function TablaPrenomina({
                     data-hora={row.hora}
                     data-prenomina-cell={cellKey}
                     className={`relative border border-border p-0 transition-all duration-500 ${
-                      hasIncident ? "bg-sky-100" : ""
-                    } ${
                       isHighlighted
-                        ? "z-10 ring-4 ring-primary ring-inset bg-primary/20"
+                        ? "z-10 ring-4 ring-primary ring-inset"
                         : ""
                     }`}
+                    style={
+                      hasIncident
+                        ? { backgroundColor: incident.color || "#BAE6FD" }
+                        : undefined
+                    }
                   >
                     <button
                       type="button"
                       onDoubleClick={() => onSelectCell(row, day)}
-                      className={`min-h-9 w-full px-2 py-1 text-center text-[11px] hover:bg-primary/10 ${
-                        hasIncident ? "pr-7 font-semibold" : ""
+                      className={`min-h-14 w-full px-3 py-2 text-[11px] hover:bg-primary/10 ${
+                        hasIncident ? "pr-8" : ""
+                      } ${
+                        isEmptyCell
+                          ? "italic text-muted-foreground"
+                          : "text-foreground"
                       }`}
                       title={
                         hasIncident
                           ? "Doble click para editar esta incidencia"
-                          : "Doble click para cargar esta celda en incidencia"
+                          : "Doble click para agregar una incidencia"
                       }
                     >
-                      {value}
+                      {hasIncident ? (
+                        <div className="flex w-full flex-col items-start gap-1.5 text-left">
+                          <span className="w-full font-bold uppercase leading-tight text-foreground">
+                            {incidentLabel || "Incidencia"}
+                          </span>
+
+                          {dateTimeLines.length > 0 ? (
+                            <ul className="w-full list-disc space-y-1 pl-4 font-normal text-muted-foreground">
+                              {dateTimeLines.map((line, index) => (
+                                <li
+                                  key={`${line}-${index}`}
+                                  className="whitespace-normal leading-tight"
+                                >
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="font-normal text-muted-foreground">
+                              Sin fecha u hora registrada
+                            </span>
+                          )}
+                        </div>
+                      ) : cleanValue ? (
+                        dateTimeLines.length > 0 ? (
+                          <ul className="w-full list-disc space-y-1 pl-4 text-left font-normal text-foreground">
+                            {dateTimeLines.map((line, index) => (
+                              <li
+                                key={`${line}-${index}`}
+                                className="whitespace-normal leading-tight"
+                              >
+                                {line}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="whitespace-pre-line text-left text-foreground">
+                            {cleanValue}
+                          </span>
+                        )
+                      ) : (
+                        <span className="italic text-muted-foreground">
+                          Sin incidencia/s
+                        </span>
+                      )}
                     </button>
 
                     {incident && (
@@ -1294,6 +1568,32 @@ function TablaPrenomina({
           )}
         </tbody>
       </table>
+
+      <div className="flex flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Página {page} de {pages} • máximo 31 días por página
+        </p>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPageChange(Math.max(1, page - 1))}
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Anterior
+          </button>
+
+          <button
+            type="button"
+            disabled={page >= pages}
+            onClick={() => onPageChange(Math.min(pages, page + 1))}
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
