@@ -1200,14 +1200,19 @@ function TablaPrenomina({
         </thead>
 
         <tbody>
-          {rows.map((row, rowIndex) => (
+          {rows.map((row, rowIndex) => {
+            const sameAsPrev =
+              rowIndex > 0 && rows[rowIndex - 1].codigo === row.codigo;
+            return (
             <tr
               key={`${row.codigo}-${row.hora}-${rowIndex}`}
               className="hover:bg-muted/30 transition-colors"
             >
-              <td className="border border-border px-3 py-2">{row.area}</td>
+              <td className="border border-border px-3 py-2">
+                {sameAsPrev ? "" : row.area}
+              </td>
               <td className="border border-border px-3 py-2 font-medium">
-                {row.trabajador}
+                {sameAsPrev ? "" : row.trabajador}
               </td>
               {days.map((day) => {
                 const value = row.cells[day.date] ?? "";
