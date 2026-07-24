@@ -367,13 +367,25 @@ export const timecoreApi = {
   // USUARIOS DEL RELOJ
   // =========================
 
-  crearUsuario: (data: {
-    uid: number;
-    name: string;
-    role: string;
-    user_id?: string;
-  }) =>
-    request("/users/", {
+  getSiguienteUidReloj: (deviceId: number | string) =>
+    request(`/users/device/${deviceId}/next-uid`),
+
+  crearUsuario: (
+    data: {
+      uid: number;
+      name: string;
+      role: string;
+      user_id?: string;
+    },
+    params: {
+      deviceId: number | string;
+      branchId?: number | string | null;
+    }
+  ) =>
+    request(`/users/${buildQuery({
+      device_id: params.deviceId,
+      branch_id: params.branchId ?? undefined,
+    })}`, {
       method: "POST",
       body: JSON.stringify(data),
     }),

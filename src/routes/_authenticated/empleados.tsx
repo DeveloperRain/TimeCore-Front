@@ -3,8 +3,7 @@ import { AppShell } from "@/components/AppShell";
 import { useEffect, useMemo, useState } from "react";
 import { timecoreApi } from "@/lib/api/timecore";
 import { Search, Plus, Pencil, X } from "lucide-react";
-
-import { getErrorMessage } from "@/lib/api/errors";
+import { Commet } from 'react-loading-indicators';
 export const Route = createFileRoute("/_authenticated/empleados")({
   validateSearch: (search: Record<string, unknown>) => {
     const rawBranchId = search.branch_id;
@@ -35,6 +34,14 @@ type SucursalOption = {
   nombre: string;
 };
 
+type RelojOption = {
+  id: number;
+  nombre: string;
+  empresa: string;
+  branch_id: number | null;
+  activo: boolean;
+};
+
 type EmpleadoFront = {
   id: number;
   uid: number;
@@ -46,6 +53,7 @@ type EmpleadoFront = {
   empresa: string;
   estado: EstadoEmpleado;
   branch_id?: number | null;
+  device_id?: number | null;
 };
 
 function normalizeEstado(value: any): EstadoEmpleado {
@@ -78,6 +86,8 @@ function EmpleadosPage() {
   const [filterSucursal, setFilterSucursal] = useState("");
   const [filterEstado, setFilterEstado] = useState("");
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
+  const [relojes, setRelojes] = useState<RelojOption[]>([]);
+  const [calculatingUid, setCalculatingUid] = useState(false);
   const [selectedBranchName, setSelectedBranchName] = useState("");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<EmpleadoFront | null>(null);
@@ -96,6 +106,7 @@ function EmpleadosPage() {
     sucursal: "",
     email: "",
     empresa: "",
+    device_id: "",
     estado: "Activo" as EstadoEmpleado,
   });
 
@@ -179,6 +190,10 @@ function EmpleadosPage() {
             u.branch_id !== undefined && u.branch_id !== null
               ? Number(u.branch_id)
               : null,
+          device_id:
+            u.device_id !== undefined && u.device_id !== null
+              ? Number(u.device_id)
+              : null,
         }));
 
         setEmpleados(empleadosApi);
@@ -206,29 +221,128 @@ function EmpleadosPage() {
     return found?.id;
   };
 
-  const openAdd = () => {
-    cargarSucursales().then((opciones) => {
-      const selected = isBranchMode
-        ? opciones.find((s) => s.id === Number(branchId))
-        : opciones[0];
+  const cargarRelojesDeSucursal = async (
+    selectedBranchId?: number,
+  ): Promise<RelojOption[]> => {
+    if (!selectedBranchId) {
+      setRelojes([]);
+      return [];
+    }
 
-      setEditing(null);
-      setForm({
-        uid: "",
-        nombre: "",
-        area: "",
-        puesto: "usuario",
-        sucursal: selected?.nombre ?? "",
-        email: "",
-        empresa: "",
-        estado: "Activo",
-      });
-      setOpen(true);
-    });
+    try {
+      const res = await timecoreApi.getDevices({ branchId: selectedBranchId });
+      const data = Array.isArray(res) ? res : res?.data ?? [];
+
+      const opciones: RelojOption[] = data
+        .map((device: any) => ({
+          id: Number(device.id),
+          nombre: String(device.nombre ?? device.name ?? "Reloj sin nombre"),
+          empresa: String(device.empresa ?? ""),
+          branch_id:
+            device.branch_id !== undefined && device.branch_id !== null
+              ? Number(device.branch_id)
+              : null,
+          activo: Boolean(device.activo ?? device.is_active ?? true),
+        }))
+        .filter((device: RelojOption) => device.activo);
+
+      setRelojes(opciones);
+      return opciones;
+    } catch (err) {
+      console.error("Error cargando relojes:", err);
+      setRelojes([]);
+      return [];
+    }
   };
 
-  const openEdit = (e: EmpleadoFront) => {
-    cargarSucursales();
+  const calcularSiguienteUid = async (deviceId: number) => {
+    setCalculatingUid(true);
+
+    try {
+      const res = await timecoreApi.getSiguienteUidReloj(deviceId);
+      const nextUid = Number(res?.data?.next_uid ?? 1);
+
+      setForm((current) => ({
+        ...current,
+        uid: String(nextUid),
+      }));
+    } catch (err) {
+      console.error("Error calculando UID del reloj:", err);
+      setForm((current) => ({ ...current, uid: "" }));
+      window.alert(
+        "No se pudo consultar la UID del reloj seleccionado. Verifica que esté conectado."
+      );
+    } finally {
+      setCalculatingUid(false);
+    }
+  };
+
+  const seleccionarReloj = async (deviceIdValue: string) => {
+    const selectedDevice = relojes.find(
+      (device) => device.id === Number(deviceIdValue)
+    );
+
+    setForm((current) => ({
+      ...current,
+      device_id: deviceIdValue,
+      empresa: selectedDevice?.empresa ?? "",
+      uid: "",
+    }));
+
+    if (selectedDevice) {
+      await calcularSiguienteUid(selectedDevice.id);
+    }
+  };
+
+  const seleccionarSucursal = async (sucursalNombre: string) => {
+    const selectedBranchId = getBranchIdBySucursalName(sucursalNombre);
+    const devices = await cargarRelojesDeSucursal(selectedBranchId);
+    const firstDevice = devices[0];
+
+    setForm((current) => ({
+      ...current,
+      sucursal: sucursalNombre,
+      device_id: firstDevice ? String(firstDevice.id) : "",
+      empresa: firstDevice?.empresa ?? "",
+      uid: "",
+    }));
+
+    if (firstDevice) {
+      await calcularSiguienteUid(firstDevice.id);
+    }
+  };
+
+  const openAdd = async () => {
+    const opciones = await cargarSucursales();
+    const selected = isBranchMode
+      ? opciones.find((s) => s.id === Number(branchId))
+      : opciones[0];
+
+    const devices = await cargarRelojesDeSucursal(selected?.id);
+    const firstDevice = devices[0];
+
+    setEditing(null);
+    setForm({
+      uid: "",
+      nombre: "",
+      area: "",
+      puesto: "usuario",
+      sucursal: selected?.nombre ?? "",
+      email: "",
+      empresa: firstDevice?.empresa ?? "",
+      device_id: firstDevice ? String(firstDevice.id) : "",
+      estado: "Activo",
+    });
+    setOpen(true);
+
+    if (firstDevice) {
+      await calcularSiguienteUid(firstDevice.id);
+    }
+  };
+
+  const openEdit = async (e: EmpleadoFront) => {
+    await cargarSucursales();
+    await cargarRelojesDeSucursal(e.branch_id ?? undefined);
     setEditing(e);
     setForm({
       uid: String(e.uid),
@@ -238,14 +352,20 @@ function EmpleadosPage() {
       sucursal: e.sucursal === "Sin sucursal" ? "" : e.sucursal,
       email: e.email === "Sin correo" ? "" : e.email,
       empresa: e.empresa,
+      device_id: e.device_id ? String(e.device_id) : "",
       estado: e.estado,
     });
     setOpen(true);
   };
 
   const guardarEmpleado = () => {
-    if (!form.uid.trim() || !form.area.trim() || !form.nombre.trim()) {
-      alert("UID, Área y Nombre son obligatorios");
+    if (
+      !form.uid.trim() ||
+      !form.area.trim() ||
+      !form.nombre.trim() ||
+      !form.device_id
+    ) {
+      alert("UID, Área, Nombre y Reloj son obligatorios");
       return;
     }
 
@@ -264,24 +384,37 @@ function EmpleadosPage() {
 
     if (!editing) {
       timecoreApi
-        .crearUsuario({
-          uid: Number(form.uid),
-          name: form.nombre,
-          role: form.puesto,
-        })
-        .then(() => {
-          alert("Empleado creado con éxito");
-        })
-        .then(() =>
-          timecoreApi.actualizarPerfilEmpleado(Number(form.uid), profilePayload)
+        .crearUsuario(
+          {
+            uid: Number(form.uid),
+            name: form.nombre,
+            role: form.puesto,
+          },
+          {
+            deviceId: Number(form.device_id),
+            branchId: selectedBranchId,
+          }
         )
-        .then(() => {
+        .then(async (created) => {
+          const createdUserId = Number(created?.data?.id);
+
+          if (!createdUserId) {
+            throw new Error("El backend no devolvió el ID interno del empleado");
+          }
+
+          await timecoreApi.actualizarPerfilEmpleadoPorId(
+            createdUserId,
+            profilePayload
+          );
+
           if (form.estado !== "Activo") {
-            return timecoreApi.actualizarEstadoEmpleado(
-              Number(form.uid),
+            await timecoreApi.actualizarEstadoEmpleadoPorId(
+              createdUserId,
               form.estado
             );
           }
+
+          alert("Empleado creado con éxito");
         })
         .then(() => {
           cargarEmpleados();
@@ -294,6 +427,9 @@ function EmpleadosPage() {
 
       return;
     }
+
+    // Agregar animacion de carga mientras se actualiza el empleado
+    setLoading(true);
 
     timecoreApi
       .actualizarUsuario(editing.uid, {
@@ -312,6 +448,9 @@ function EmpleadosPage() {
       .catch((err) => {
         console.error("Error actualizando empleado:", err);
         alert("No se pudo actualizar el empleado, revise si el reloj está conectado o la UID es correcta.");
+      })
+      .finally(() => {
+        setLoading(false);
       });
   };
 
@@ -474,6 +613,11 @@ function EmpleadosPage() {
 
                   <td className="px-5 py-3">
                     <span
+                      title={
+                        e.estado === "Inactivo"
+                          ? "Empleado guardado en BD aunque ya no esté en el reloj"
+                          : "Empleado presente en el reloj"
+                      }
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
                         e.estado === "Activo"
                           ? "bg-success/10 text-success"
@@ -529,7 +673,7 @@ function EmpleadosPage() {
 
         <div className="flex flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
-            Página {page} de {totalPages} • {total} empleados
+            Página {page} de {totalPages} • Maximo {PAGE_SIZE} empleados por página 
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -554,10 +698,10 @@ function EmpleadosPage() {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-xl bg-card border border-border shadow-xl">
+          <div className="relative w-full max-w-lg rounded-xl bg-card border border-border shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <h3 className="text-lg font-semibold text-foreground">
-                {editing ? "Editar empleado" : "Nuevo empleado"}
+                {editing ? "Editar empleado" : "Nuevo empleado"}                                               r
               </h3>
 
               <button
@@ -568,14 +712,26 @@ function EmpleadosPage() {
               </button>
             </div>
 
+            {loading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card/70 backdrop-blur-[1px]">
+                <Commet color="#00884f" size="medium" text="" textColor="" />
+              </div>
+            )}
+
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field
                   label="UID en el Reloj"
                   value={form.uid}
-                  disabled={!!editing}
+                  disabled={!!editing || calculatingUid || !form.device_id}
                   onChange={(v) => setForm({ ...form, uid: v })}
-                  placeholder="Ej. 23"
+                  placeholder={
+                    calculatingUid
+                      ? "Calculando..."
+                      : form.device_id
+                        ? "UID automática"
+                        : "Selecciona un reloj"
+                  }
                 />
 
                 <Field
@@ -615,15 +771,37 @@ function EmpleadosPage() {
                   <select
                     value={form.sucursal}
                     disabled={isBranchMode}
-                    onChange={(e) =>
-                      setForm({ ...form, sucursal: e.target.value })
-                    }
+                    onChange={(e) => seleccionarSucursal(e.target.value)}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
                   >
                     <option value="">Seleccionar...</option>
                     {sucursalesVisibles.map((s) => (
                       <option key={s.id} value={s.nombre}>
                         {s.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    Reloj físico
+                  </label>
+                  <select
+                    value={form.device_id}
+                    disabled={!!editing || relojes.length === 0}
+                    onChange={(e) => seleccionarReloj(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
+                  >
+                    <option value="">
+                      {relojes.length === 0
+                        ? "Sin relojes activos"
+                        : "Seleccionar reloj..."}
+                    </option>
+                    {relojes.map((reloj) => (
+                      <option key={reloj.id} value={reloj.id}>
+                        {reloj.nombre}
+                        {reloj.empresa ? ` (${reloj.empresa})` : ""}
                       </option>
                     ))}
                   </select>
@@ -640,17 +818,13 @@ function EmpleadosPage() {
                   <label className="text-sm font-medium text-foreground">
                     Empresa
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={form.empresa}
-                    onChange={(e) =>
-                      setForm({ ...form, empresa: e.target.value })
-                    }
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Seleccionar...</option>
-                    <option value="FISMAN">FISMAN</option>
-                    <option value="SELEFF">SELEFF</option>
-                  </select>
+                    readOnly
+                    placeholder="Se asigna según el reloj"
+                    className="w-full rounded-md border border-input bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+                  />
                 </div>
 
                 <div className="space-y-1.5 sm:col-span-2">
@@ -685,7 +859,8 @@ function EmpleadosPage() {
                 <button
                   type="button"
                   onClick={guardarEmpleado}
-                  className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-hover"
+                  disabled={loading}
+                  className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-hover disabled:opacity-70"
                 >
                   {editing ? "Guardar cambios" : "Crear empleado"}
                 </button>
@@ -697,7 +872,6 @@ function EmpleadosPage() {
     </AppShell>
   );
 }
-
 function Field({
   label,
   value,
@@ -718,7 +892,7 @@ function Field({
       <label className="text-sm font-medium text-foreground">{label}</label>
       <input
         type="text"
-        value={value}
+        value={value} 
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
