@@ -292,6 +292,20 @@ function formatSpanishDate(value: string) {
   }).format(date);
 }
 
+function formatCompactDate(value: string) {
+  const date = parseLocalDate(value);
+
+  if (!date) {
+    return "Sin fecha";
+  }
+
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
 function getPrenominaDays(startDate: string, endDate: string): PrenominaDay[] {
   const start = parseLocalDate(startDate);
   const end = parseLocalDate(endDate);
@@ -665,7 +679,7 @@ function AsistenciasPage() {
       });
   };
 
-  const guardarIncidencia = () => {
+  const guardarIncidencia = async () => {
     const empleadoObjetivo = incidenciaForm.user_id || empleado;
 
     if (!empleadoObjetivo || !incidenciaForm.fecha || !incidenciaForm.hora) {
@@ -678,9 +692,9 @@ function AsistenciasPage() {
       return;
     }
 
-    const debeRegresarACelda = Boolean(incidenciaForm.id);
+    const estabaEditando = Boolean(incidenciaForm.id);
 
-    if (debeRegresarACelda) {
+    if (estabaEditando) {
       pendingScrollIncidentRef.current = {
         userId: empleadoObjetivo,
         fecha: incidenciaForm.fecha,
@@ -690,37 +704,46 @@ function AsistenciasPage() {
 
     setSavingIncident(true);
 
-    const request = timecoreApi.guardarIncidenciaPrenomina({
-      id: incidenciaForm.id,
-      user_id: empleadoObjetivo,
-      fecha: incidenciaForm.fecha,
-      hora: incidenciaForm.hora,
-      incidencia: incidenciaForm.incidencia,
-      color: incidenciaForm.color,
-    });
+    try {
+      /*
+       * Al editar, primero se elimina únicamente la incidencia anterior y
+       * después se crea una incidencia nueva en la fecha seleccionada.
+       *
+       * No se envía el ID anterior al guardar, por lo que el backend no
+       * traslada ni replica las asistencias de la fecha original.
+       * Las asistencias permanecen en attendance_records y continúan
+       * mostrándose en el día real en que fueron registradas.
+       */
+      if (incidenciaForm.id) {
+        await timecoreApi.eliminarIncidenciaPrenomina(incidenciaForm.id);
+      }
 
-    request
-      .then(() => {
-        setIncidenciaForm((current) => ({
-          ...current,
-          id: undefined,
-          incidencia: "",
-          color: "#BAE6FD",
-          original_user_id: undefined,
-          original_fecha: undefined,
-          original_hora: undefined,
-        }));
-
-        return cargarPrenomina();
-      })
-      .catch((err) => {
-        pendingScrollIncidentRef.current = null;
-        console.error("Error guardando incidencia:", err);
-        window.alert(getErrorMessage(err, "No se pudo guardar la incidencia."));
-      })
-      .finally(() => {
-        setSavingIncident(false);
+      await timecoreApi.guardarIncidenciaPrenomina({
+        user_id: empleadoObjetivo,
+        fecha: incidenciaForm.fecha,
+        hora: incidenciaForm.hora,
+        incidencia: incidenciaForm.incidencia,
+        color: incidenciaForm.color,
       });
+
+      setIncidenciaForm((current) => ({
+        ...current,
+        id: undefined,
+        incidencia: "",
+        color: "#BAE6FD",
+        original_user_id: undefined,
+        original_fecha: undefined,
+        original_hora: undefined,
+      }));
+
+      await cargarPrenomina();
+    } catch (err) {
+      pendingScrollIncidentRef.current = null;
+      console.error("Error guardando incidencia:", err);
+      window.alert(getErrorMessage(err, "No se pudo guardar la incidencia."));
+    } finally {
+      setSavingIncident(false);
+    }
   };
 
   const seleccionarCeldaPrenomina = (
@@ -747,7 +770,7 @@ function AsistenciasPage() {
       id: incident?.id,
       user_id: ownerCode,
       fecha: day.date,
-      hora: row.hora,
+      hora: incident?.hora ?? row.hora,
       incidencia: incident?.incidencia ?? "",
       color: incident?.color ?? "#BAE6FD",
       original_user_id: incident?.user_id,
@@ -769,7 +792,10 @@ function AsistenciasPage() {
       id: undefined,
       incidencia: "",
       color: "#BAE6FD",
-      }));
+      original_user_id: undefined,
+      original_fecha: undefined,
+      original_hora: undefined,
+    }));
   };
 
   const borrarIncidencia = (incidentId: number) => {
@@ -1489,8 +1515,8 @@ function TablaPrenomina({
                             {incidentLabel || "Incidencia"}
                           </span>
 
-                          {dateTimeLines.length > 0 ? (
-                            <ul className="w-full list-disc space-y-1 pl-4 font-normal text-muted-foreground">
+                          {dateTimeLines.length > 0 && (
+                            <ul className="w-full list-disc space-y-1 pl-4 text-left font-normal text-foreground">
                               {dateTimeLines.map((line, index) => (
                                 <li
                                   key={`${line}-${index}`}
@@ -1500,10 +1526,6 @@ function TablaPrenomina({
                                 </li>
                               ))}
                             </ul>
-                          ) : (
-                            <span className="font-normal text-muted-foreground">
-                              Sin fecha u hora registrada
-                            </span>
                           )}
                         </div>
                       ) : cleanValue ? (
@@ -1676,7 +1698,7 @@ function SpanishDatePicker({
             }}
           />
         </PopoverContent>
-      </Popover>
+      </Popover>2
     </div>
   );
 }

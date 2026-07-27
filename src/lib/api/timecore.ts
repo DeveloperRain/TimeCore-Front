@@ -370,6 +370,17 @@ export const timecoreApi = {
   getSiguienteUidReloj: (deviceId: number | string) =>
     request(`/users/device/${deviceId}/next-uid`),
 
+  crearEmpleadoEnOtroReloj: (
+    sourceUserId: number,
+    targetDeviceId: number | string
+  ) =>
+    request(`/users/by-id/${sourceUserId}/copy-to-device`, {
+      method: "POST",
+      body: JSON.stringify({
+        target_device_id: Number(targetDeviceId),
+      }),
+    }),
+
   crearUsuario: (
     data: {
       uid: number;

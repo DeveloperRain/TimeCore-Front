@@ -96,7 +96,19 @@ function EmpleadosPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyingEmployee, setCopyingEmployee] = useState(false);
+  const [calculatingCopyUid, setCalculatingCopyUid] = useState(false);
+  const [destinationDevices, setDestinationDevices] = useState<RelojOption[]>([]);
   const PAGE_SIZE = 50;
+
+  const [copyForm, setCopyForm] = useState({
+    branch_id: "",
+    sucursal: "",
+    device_id: "",
+    empresa: "",
+    uid: "",
+  });
 
   const [form, setForm] = useState({
     uid: "",
@@ -162,7 +174,7 @@ function EmpleadosPage() {
   const cargarEmpleados = () => {
     setLoading(true);
 
-    timecoreApi
+    return timecoreApi
       .getUsuariosPaginados({
         page,
         limit: PAGE_SIZE,
@@ -358,6 +370,180 @@ function EmpleadosPage() {
     setOpen(true);
   };
 
+  const cargarRelojesDestino = async (
+    selectedBranchId?: number,
+    sourceDeviceId?: number | null,
+  ): Promise<RelojOption[]> => {
+    if (!selectedBranchId) {
+      setDestinationDevices([]);
+      return [];
+    }
+
+    try {
+      const res = await timecoreApi.getDevices({ branchId: selectedBranchId });
+      const data = Array.isArray(res) ? res : res?.data ?? [];
+
+      const opciones: RelojOption[] = data
+        .map((device: any) => ({
+          id: Number(device.id),
+          nombre: String(device.nombre ?? device.name ?? "Reloj sin nombre"),
+          empresa: String(device.empresa ?? ""),
+          branch_id:
+            device.branch_id !== undefined && device.branch_id !== null
+              ? Number(device.branch_id)
+              : null,
+          activo: Boolean(device.activo ?? device.is_active ?? true),
+        }))
+        .filter(
+          (device: RelojOption) =>
+            device.activo && device.id !== Number(sourceDeviceId ?? 0)
+        );
+
+      setDestinationDevices(opciones);
+      return opciones;
+    } catch (err) {
+      console.error("Error cargando relojes destino:", err);
+      setDestinationDevices([]);
+      return [];
+    }
+  };
+
+  const calcularUidDestino = async (deviceId: number) => {
+    setCalculatingCopyUid(true);
+
+    try {
+      const res = await timecoreApi.getSiguienteUidReloj(deviceId);
+      const nextUid = Number(res?.data?.next_uid ?? 1);
+
+      setCopyForm((current) => ({
+        ...current,
+        uid: String(nextUid),
+      }));
+    } catch (err) {
+      console.error("Error calculando UID destino:", err);
+      setCopyForm((current) => ({ ...current, uid: "" }));
+    } finally {
+      setCalculatingCopyUid(false);
+    }
+  };
+
+  const seleccionarSucursalDestino = async (branchIdValue: string) => {
+    const selectedBranch = sucursales.find(
+      (branch) => branch.id === Number(branchIdValue)
+    );
+
+    const devices = await cargarRelojesDestino(
+      selectedBranch?.id,
+      editing?.device_id
+    );
+    const firstDevice = devices[0];
+
+    setCopyForm({
+      branch_id: branchIdValue,
+      sucursal: selectedBranch?.nombre ?? "",
+      device_id: firstDevice ? String(firstDevice.id) : "",
+      empresa: firstDevice?.empresa ?? "",
+      uid: "",
+    });
+
+    if (firstDevice) {
+      await calcularUidDestino(firstDevice.id);
+    }
+  };
+
+  const seleccionarRelojDestino = async (deviceIdValue: string) => {
+    const selectedDevice = destinationDevices.find(
+      (device) => device.id === Number(deviceIdValue)
+    );
+
+    setCopyForm((current) => ({
+      ...current,
+      device_id: deviceIdValue,
+      empresa: selectedDevice?.empresa ?? "",
+      uid: "",
+    }));
+
+    if (selectedDevice) {
+      await calcularUidDestino(selectedDevice.id);
+    }
+  };
+
+  const abrirCrearEnOtroReloj = async () => {
+    if (!editing) return;
+
+    const defaultBranch =
+      sucursales.find((branch) => branch.id === editing.branch_id) ??
+      sucursales[0];
+
+    const devices = await cargarRelojesDestino(
+      defaultBranch?.id,
+      editing.device_id
+    );
+    const firstDevice = devices[0];
+
+    setCopyForm({
+      branch_id: defaultBranch ? String(defaultBranch.id) : "",
+      sucursal: defaultBranch?.nombre ?? "",
+      device_id: firstDevice ? String(firstDevice.id) : "",
+      empresa: firstDevice?.empresa ?? "",
+      uid: "",
+    });
+    setCopyOpen(true);
+
+    if (firstDevice) {
+      await calcularUidDestino(firstDevice.id);
+    }
+  };
+
+  const crearEnOtroReloj = async () => {
+    if (!editing || !copyForm.device_id) {
+      window.alert("Selecciona el reloj físico de destino.");
+      return;
+    }
+
+    const targetDevice = destinationDevices.find(
+      (device) => device.id === Number(copyForm.device_id)
+    );
+
+    const confirmed = window.confirm(
+      `Se creará otra asignación de ${editing.nombre} en ${
+        targetDevice?.nombre ?? "el reloj seleccionado"
+      } (${copyForm.empresa || "sin empresa"}).
+
+` +
+        "El empleado original y todas sus asistencias históricas permanecerán intactas. ¿Deseas continuar?"
+    );
+
+    if (!confirmed) return;
+
+    setCopyingEmployee(true);
+
+    try {
+      const res = await timecoreApi.crearEmpleadoEnOtroReloj(
+        editing.id,
+        Number(copyForm.device_id)
+      );
+
+      const newAssignment = res?.data?.new_assignment ?? {};
+      const createdUid = newAssignment.uid ?? copyForm.uid;
+
+      await cargarEmpleados();
+      setCopyOpen(false);
+      setOpen(false);
+
+      window.alert(
+        `Empleado creado en ${targetDevice?.nombre ?? "el reloj destino"} con UID ${createdUid}. La asignación original se conservó.`
+      );
+    } catch (err) {
+      console.error("Error creando empleado en otro reloj:", err);
+      window.alert(
+        "No se pudo crear la nueva asignación. Verifica que el reloj destino esté conectado."
+      );
+    } finally {
+      setCopyingEmployee(false);
+    }
+  };
+
   const guardarEmpleado = () => {
     if (
       !form.uid.trim() ||
@@ -383,6 +569,8 @@ function EmpleadosPage() {
     };
 
     if (!editing) {
+      setLoading(true);
+
       timecoreApi
         .crearUsuario(
           {
@@ -423,6 +611,9 @@ function EmpleadosPage() {
         .catch((err) => {
           console.error("Error creando empleado:", err);
           alert("No se pudo crear el empleado, revise si el reloj está conectado o la UID es correcta.");
+        })
+        .finally(() => {
+          setLoading(false);
         });
 
       return;
@@ -432,7 +623,7 @@ function EmpleadosPage() {
     setLoading(true);
 
     timecoreApi
-      .actualizarUsuario(editing.uid, {
+      .actualizarUsuarioPorId(editing.id, {
         name: form.nombre,
         role: form.puesto,
       })
@@ -701,7 +892,7 @@ function EmpleadosPage() {
           <div className="relative w-full max-w-lg rounded-xl bg-card border border-border shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <h3 className="text-lg font-semibold text-foreground">
-                {editing ? "Editar empleado" : "Nuevo empleado"}                                               r
+                {editing ? "Editar empleado" : "Nuevo empleado"}                                               
               </h3>
 
               <button
@@ -847,7 +1038,18 @@ function EmpleadosPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border">
+                {editing && (
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={abrirCrearEnOtroReloj}
+                    className="mr-auto rounded-md border border-primary px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-70"
+                  >
+                    Crear en otro reloj
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
@@ -863,6 +1065,146 @@ function EmpleadosPage() {
                   className="px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary-hover disabled:opacity-70"
                 >
                   {editing ? "Guardar cambios" : "Crear empleado"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {copyOpen && editing && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/50 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">
+                  Crear en otro reloj
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Se creará una asignación independiente de {editing.nombre}.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={copyingEmployee}
+                onClick={() => setCopyOpen(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {copyingEmployee && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-card/75 backdrop-blur-[1px]">
+                <div className="flex flex-col items-center gap-3">
+                  <Commet color="#00884f" size="medium" text="" textColor="" />
+                  <p className="text-sm font-medium text-foreground">
+                    Creando empleado en el reloj destino...
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4 p-5">
+              <div className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                La asignación original en <strong>{editing.sucursal}</strong> / {editing.empresa || "sin empresa"} no se modificará. Sus asistencias históricas permanecerán ligadas al reloj de origen.
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    Sucursal destino
+                  </label>
+                  <select
+                    value={copyForm.branch_id}
+                    disabled={copyingEmployee}
+                    onChange={(e) => seleccionarSucursalDestino(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {sucursales.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    Reloj físico destino
+                  </label>
+                  <select
+                    value={copyForm.device_id}
+                    disabled={
+                      copyingEmployee ||
+                      !copyForm.branch_id ||
+                      destinationDevices.length === 0
+                    }
+                    onChange={(e) => seleccionarRelojDestino(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-70"
+                  >
+                    <option value="">
+                      {destinationDevices.length === 0
+                        ? "Sin otros relojes activos"
+                        : "Seleccionar reloj..."}
+                    </option>
+                    {destinationDevices.map((device) => (
+                      <option key={device.id} value={device.id}>
+                        {device.nombre}
+                        {device.empresa ? ` (${device.empresa})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <Field
+                  label="UID nueva"
+                  value={copyForm.uid}
+                  disabled
+                  onChange={() => undefined}
+                  placeholder={
+                    calculatingCopyUid
+                      ? "Calculando..."
+                      : "Se asignará automáticamente"
+                  }
+                />
+
+                <Field
+                  label="Empresa destino"
+                  value={copyForm.empresa}
+                  disabled
+                  onChange={() => undefined}
+                  placeholder="Se asigna según el reloj"
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Se copiarán el nombre, rol, área y correo actualmente guardados. Los cambios posteriores serán independientes en cada sucursal y reloj.
+              </p>
+
+              <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
+                <button
+                  type="button"
+                  disabled={copyingEmployee}
+                  onClick={() => setCopyOpen(false)}
+                  className="rounded-md px-4 py-2 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  disabled={
+                    copyingEmployee ||
+                    calculatingCopyUid ||
+                    !copyForm.device_id
+                  }
+                  onClick={crearEnOtroReloj}
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Crear asignación
                 </button>
               </div>
             </div>
