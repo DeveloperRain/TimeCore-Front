@@ -39,6 +39,8 @@ type EmpleadoFront = {
   area: string;
   sucursal: string;
   empresa: string;
+  device_id: number | null;
+  assignment_key: string;
 };
 
 type AsistenciaFront = {
@@ -51,6 +53,8 @@ type AsistenciaFront = {
   entrada: string;
   estado: string;
   empresa: string;
+  device_id: number | null;
+  assignment_key: string;
 };
 
 type PrenominaDay = {
@@ -60,6 +64,8 @@ type PrenominaDay = {
 
 type PrenominaIncident = {
   id: number;
+  device_id: number | null;
+  assignment_key: string;
   user_id: string;
   fecha: string;
   hora: string;
@@ -75,6 +81,8 @@ type PrenominaRow = {
   area: string;
   trabajador: string;
   codigo: string;
+  device_id: number | null;
+  assignment_key: string;
   hora: string;
   empresa: string;
   cells: Record<string, string>;
@@ -89,12 +97,14 @@ type PrenominaData = {
 
 type IncidenciaForm = {
   id?: number;
+  assignment_key: string;
+  device_id: number | null;
   user_id: string;
   fecha: string;
   hora: string;
   incidencia: string;
   color: string;
-  original_user_id?: string;
+  original_assignment_key?: string;
   original_fecha?: string;
   original_hora?: string;
 };
@@ -104,6 +114,13 @@ const EMPTY_PRENOMINA: PrenominaData = {
   hours: [],
   rows: [],
 };
+
+function makeAssignmentKey(
+  deviceId: number | null | undefined,
+  userId: string | number | null | undefined
+) {
+  return `${deviceId ?? 0}:${String(userId ?? "").trim()}`;
+}
 
 function normalizePrenominaData(rawData: any): PrenominaData {
   const source = rawData ?? EMPTY_PRENOMINA;
@@ -116,6 +133,7 @@ function normalizePrenominaData(rawData: any): PrenominaData {
       const codigo = String(
         row.codigo ??
           row.user_id ??
+          row.UID ??
           row.uid ??
           row.employee_id ??
           row.id ??
@@ -131,15 +149,36 @@ function normalizePrenominaData(rawData: any): PrenominaData {
           `Empleado ${index + 1}`
       ).trim();
 
+      const deviceId =
+        row.device_id !== undefined && row.device_id !== null
+          ? Number(row.device_id)
+          : null;
+      const assignmentKey = String(
+        row.assignment_key ?? makeAssignmentKey(deviceId, codigo)
+      );
+
       const incidentsSource = row.incidents ?? row.incidencias ?? {};
       const incidents: Record<string, PrenominaIncident> = {};
 
       Object.entries(incidentsSource).forEach(([fecha, value]: [string, any]) => {
         if (!value) return;
 
+        const incidentDeviceId =
+          value.device_id !== undefined && value.device_id !== null
+            ? Number(value.device_id)
+            : deviceId;
+        const incidentUserId = String(
+          value.user_id ?? codigo ?? trabajador
+        );
+
         incidents[fecha] = {
           id: Number(value.id ?? 0),
-          user_id: String(value.user_id ?? codigo ?? trabajador),
+          device_id: incidentDeviceId,
+          assignment_key: String(
+            value.assignment_key ??
+              makeAssignmentKey(incidentDeviceId, incidentUserId)
+          ),
+          user_id: incidentUserId,
           fecha: String(value.fecha ?? fecha),
           hora: String(value.hora ?? row.hora ?? ""),
           incidencia: String(value.incidencia ?? value.type ?? ""),
@@ -155,6 +194,8 @@ function normalizePrenominaData(rawData: any): PrenominaData {
         area: String(row.area ?? row.department ?? row.departamento ?? ""),
         trabajador: trabajador || codigo || `Empleado ${index + 1}`,
         codigo: codigo || trabajador || `empleado-${index + 1}`,
+        device_id: deviceId,
+        assignment_key: assignmentKey,
         hora: String(row.hora ?? row.hour ?? ""),
         empresa: String(row.empresa ?? row.company ?? ""),
         cells: row.cells ?? {},
@@ -336,19 +377,28 @@ function getPrenominaDays(startDate: string, endDate: string): PrenominaDay[] {
 }
 
 
-function getPrenominaCellKey(codigo: string, hora: string, fecha: string) {
-  return `${codigo}__${hora}__${fecha}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+function getPrenominaCellKey(
+  assignmentKey: string,
+  hora: string,
+  fecha: string
+) {
+  return `${assignmentKey}__${hora}__${fecha}`.replace(
+    /[^a-zA-Z0-9_-]/g,
+    "_"
+  );
 }
 
 function getDefaultIncidenciaForm(): IncidenciaForm {
   return {
     id: undefined,
+    assignment_key: "",
+    device_id: null,
     user_id: "",
     fecha: getDefaultStartDate(),
     hora: "06:00",
     incidencia: "",
     color: "#BAE6FD",
-    original_user_id: undefined,
+    original_assignment_key: undefined,
     original_fecha: undefined,
     original_hora: undefined,
   };
@@ -385,7 +435,7 @@ function AsistenciasPage() {
   const PRENOMINA_DAYS_PER_PAGE = 31;
   const incidenciaFormRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollIncidentRef = useRef<{
-    userId: string;
+    assignmentKey: string;
     fecha: string;
     hora: string;
   } | null>(null);
@@ -438,7 +488,7 @@ function AsistenciasPage() {
 
       const celda = celdas.find(
         (item) =>
-          item.dataset.userId === target.userId &&
+          item.dataset.assignmentKey === target.assignmentKey &&
           item.dataset.fecha === target.fecha &&
           item.dataset.hora === target.hora
       );
@@ -486,21 +536,37 @@ function AsistenciasPage() {
       prenominaEmpleadosSeleccionados.length === 0
         ? empleados
         : empleados.filter((item) =>
-            prenominaEmpleadosSeleccionados.includes(item.codigo)
+            prenominaEmpleadosSeleccionados.includes(item.assignment_key)
           );
 
     const empleadoSigueVisible = empleadosVisibles.some(
-      (item) => item.codigo === empleado
+      (item) => item.assignment_key === empleado
     );
 
-    if (!empleadoSigueVisible) {
-      setEmpleado(empleadosVisibles[0]?.codigo ?? "");
+    const selectedEmployee = empleadoSigueVisible
+      ? empleadosVisibles.find((item) => item.assignment_key === empleado)
+      : empleadosVisibles[0];
+
+    if (!selectedEmployee) {
+      setEmpleado("");
+      setIncidenciaForm((current) => ({
+        ...current,
+        assignment_key: "",
+        device_id: null,
+        user_id: "",
+      }));
       return;
+    }
+
+    if (!empleadoSigueVisible) {
+      setEmpleado(selectedEmployee.assignment_key);
     }
 
     setIncidenciaForm((current) => ({
       ...current,
-      user_id: empleado,
+      assignment_key: selectedEmployee.assignment_key,
+      device_id: selectedEmployee.device_id,
+      user_id: selectedEmployee.codigo,
     }));
   }, [vista, empleado, empleados, prenominaEmpleadosSeleccionados]);
 
@@ -582,12 +648,22 @@ function AsistenciasPage() {
           const codigo = getEmpleadoCodigo(u);
 
           return {
-            id: Number(u.uid ?? u.id ?? 0),
+            id: Number(u.id ?? 0),
             codigo,
             nombre: String(u.name ?? u.nombre ?? "Sin nombre"),
             area: String(u.area ?? u.department ?? u.departamento ?? ""),
             sucursal: String(u.sucursal ?? u.branch_name ?? "Sin sucursal"),
             empresa: String(u.empresa ?? u.company ?? ""),
+            device_id:
+              u.device_id !== undefined && u.device_id !== null
+                ? Number(u.device_id)
+                : null,
+            assignment_key: makeAssignmentKey(
+              u.device_id !== undefined && u.device_id !== null
+                ? Number(u.device_id)
+                : null,
+              codigo
+            ),
           };
         });
 
@@ -611,13 +687,38 @@ function AsistenciasPage() {
               const rawDate = a.timestamp ?? a.punch_time ?? a.time ?? "";
               const codigo = getAsistenciaCodigo(a);
 
-              const empleadoEncontrado = empleadosApi.find(
-                (e) => e.codigo === codigo || String(e.id) === codigo
-              );
+              const attendanceDeviceId =
+                a.device_id !== undefined && a.device_id !== null
+                  ? Number(a.device_id)
+                  : null;
+
+              /*
+               * La UID sólo es única dentro de un reloj. Por eso una
+               * asistencia debe relacionarse con el empleado mediante:
+               *
+               *   device_id + uid/user_id
+               *
+               * Esto evita que una marca del reloj SELEFF tome el área y la
+               * empresa de otro empleado con la misma UID en el reloj FISMAN.
+               */
+              const empleadoEncontrado =
+                empleadosApi.find(
+                  (e) =>
+                    e.device_id === attendanceDeviceId &&
+                    e.codigo === codigo
+                ) ??
+                (attendanceDeviceId === null
+                  ? empleadosApi.find((e) => e.codigo === codigo)
+                  : undefined);
 
               return {
                 id: Number(a.id ?? index + 1),
                 codigo,
+                device_id: attendanceDeviceId,
+                assignment_key: makeAssignmentKey(
+                  attendanceDeviceId,
+                  codigo
+                ),
                 area: String(
                   a.area ??
                     a.department ??
@@ -641,7 +742,12 @@ function AsistenciasPage() {
                 fecha: getFechaFromTimestamp(rawDate),
                 entrada: getHoraFromTimestamp(rawDate) || "-",
                 estado: normalizeEstadoAsistencia(a.status ?? a.estado),
-                empresa: String(a.empresa ?? empleadoEncontrado?.empresa ?? ""),
+                empresa: String(
+                  a.empresa ??
+                    a.device_empresa ??
+                    empleadoEncontrado?.empresa ??
+                    ""
+                ),
               };
             }
           );
@@ -680,10 +786,19 @@ function AsistenciasPage() {
   };
 
   const guardarIncidencia = async () => {
-    const empleadoObjetivo = incidenciaForm.user_id || empleado;
+    const assignmentKey =
+      incidenciaForm.assignment_key || empleado;
+    const empleadoObjetivo = empleados.find(
+      (item) => item.assignment_key === assignmentKey
+    );
 
-    if (!empleadoObjetivo || !incidenciaForm.fecha || !incidenciaForm.hora) {
-      window.alert("Selecciona empleado, fecha y hora.");
+    if (
+      !empleadoObjetivo ||
+      empleadoObjetivo.device_id === null ||
+      !incidenciaForm.fecha ||
+      !incidenciaForm.hora
+    ) {
+      window.alert("Selecciona empleado, reloj, fecha y hora.");
       return;
     }
 
@@ -692,11 +807,9 @@ function AsistenciasPage() {
       return;
     }
 
-    const estabaEditando = Boolean(incidenciaForm.id);
-
-    if (estabaEditando) {
+    if (incidenciaForm.id) {
       pendingScrollIncidentRef.current = {
-        userId: empleadoObjetivo,
+        assignmentKey: empleadoObjetivo.assignment_key,
         fecha: incidenciaForm.fecha,
         hora: incidenciaForm.hora,
       };
@@ -706,20 +819,16 @@ function AsistenciasPage() {
 
     try {
       /*
-       * Al editar, primero se elimina únicamente la incidencia anterior y
-       * después se crea una incidencia nueva en la fecha seleccionada.
-       *
-       * No se envía el ID anterior al guardar, por lo que el backend no
-       * traslada ni replica las asistencias de la fecha original.
-       * Las asistencias permanecen en attendance_records y continúan
-       * mostrándose en el día real en que fueron registradas.
+       * Se elimina sólo la incidencia anterior y se crea en la nueva fecha.
+       * Las asistencias permanecen ligadas al reloj y al día reales.
        */
       if (incidenciaForm.id) {
         await timecoreApi.eliminarIncidenciaPrenomina(incidenciaForm.id);
       }
 
       await timecoreApi.guardarIncidenciaPrenomina({
-        user_id: empleadoObjetivo,
+        device_id: empleadoObjetivo.device_id,
+        user_id: empleadoObjetivo.codigo,
         fecha: incidenciaForm.fecha,
         hora: incidenciaForm.hora,
         incidencia: incidenciaForm.incidencia,
@@ -729,9 +838,12 @@ function AsistenciasPage() {
       setIncidenciaForm((current) => ({
         ...current,
         id: undefined,
+        assignment_key: empleadoObjetivo.assignment_key,
+        device_id: empleadoObjetivo.device_id,
+        user_id: empleadoObjetivo.codigo,
         incidencia: "",
         color: "#BAE6FD",
-        original_user_id: undefined,
+        original_assignment_key: undefined,
         original_fecha: undefined,
         original_hora: undefined,
       }));
@@ -751,29 +863,37 @@ function AsistenciasPage() {
     day: PrenominaDay
   ) => {
     const incident = row.incidents[day.date];
-
-    const incidentUserId = String(incident?.user_id ?? row.codigo);
+    const assignmentKey =
+      incident?.assignment_key || row.assignment_key;
 
     const owner =
-      empleados.find((item) => item.codigo === incidentUserId) ??
-      empleados.find((item) => item.codigo === row.codigo) ??
+      empleados.find(
+        (item) => item.assignment_key === assignmentKey
+      ) ??
       empleados.find(
         (item) =>
-          item.nombre.trim().toLowerCase() ===
-          row.trabajador.trim().toLowerCase()
+          item.device_id === row.device_id &&
+          item.codigo === row.codigo
       );
 
-    const ownerCode = owner?.codigo ?? incidentUserId;
+    if (!owner) {
+      window.alert(
+        "No se pudo identificar la asignación del empleado en ese reloj."
+      );
+      return;
+    }
 
-    setEmpleado(ownerCode);
+    setEmpleado(owner.assignment_key);
     setIncidenciaForm({
       id: incident?.id,
-      user_id: ownerCode,
+      assignment_key: owner.assignment_key,
+      device_id: owner.device_id,
+      user_id: owner.codigo,
       fecha: day.date,
       hora: incident?.hora ?? row.hora,
       incidencia: incident?.incidencia ?? "",
       color: incident?.color ?? "#BAE6FD",
-      original_user_id: incident?.user_id,
+      original_assignment_key: incident?.assignment_key,
       original_fecha: incident?.fecha,
       original_hora: incident?.hora,
     });
@@ -792,7 +912,7 @@ function AsistenciasPage() {
       id: undefined,
       incidencia: "",
       color: "#BAE6FD",
-      original_user_id: undefined,
+      original_assignment_key: undefined,
       original_fecha: undefined,
       original_hora: undefined,
     }));
@@ -821,124 +941,152 @@ function AsistenciasPage() {
       (!fechaFin || a.fecha <= fechaFin);
     const mE =
       empleadosSeleccionados.length === 0 ||
-      empleadosSeleccionados.includes(a.codigo);
+      empleadosSeleccionados.includes(a.assignment_key);
     const mS = !sucursal || a.sucursal === sucursal;
 
     return mF && mE && mS;
   });
 
   const prenominaRows = useMemo(() => {
-  const selectedCodes = new Set(
-    prenominaEmpleadosSeleccionados.map((value) => String(value).trim())
-  );
+    const selectedAssignments = new Set(
+      prenominaEmpleadosSeleccionados.map((value) =>
+        String(value).trim()
+      )
+    );
 
-  const selectedNames = new Set(
-    empleados
-      .filter((item) => selectedCodes.has(item.codigo))
-      .map((item) => item.nombre.trim().toLowerCase())
-  );
+    const rowsFiltradas = prenomina.rows.filter((row) => {
+      if (selectedAssignments.size === 0) {
+        return true;
+      }
 
-  const rowsFiltradas = prenomina.rows.filter((row) => {
-    if (prenominaEmpleadosSeleccionados.length === 0) {
-      return true;
-    }
+      if (selectedAssignments.has(row.assignment_key)) {
+        return true;
+      }
 
-    const rowCode = String(row.codigo ?? "").trim();
-    const rowName = String(row.trabajador ?? "").trim().toLowerCase();
-
-    if (selectedCodes.has(rowCode)) return true;
-    if (selectedNames.has(rowName)) return true;
-
-    return Object.values(row.incidents ?? {}).some((incident) => {
-      const incidentUserId = String(incident?.user_id ?? "").trim();
-      return selectedCodes.has(incidentUserId);
+      return (
+        Object.values(
+          row.incidents ?? {}
+        ) as PrenominaIncident[]
+      ).some(
+        (incident) =>
+          incident &&
+          selectedAssignments.has(incident.assignment_key)
+      );
     });
-  });
 
-  const empleadosAgrupados = new Map<string, PrenominaRow>();
+    const empleadosAgrupados = new Map<string, PrenominaRow>();
 
-  rowsFiltradas.forEach((row) => {
-    /*
-     * El código identifica al empleado. Incluimos empresa para evitar mezclar
-     * empleados de relojes o empresas diferentes que tengan el mismo código.
-     */
-    const employeeKey = `${String(row.codigo).trim()}__${String(
-      row.empresa
-    ).trim()}`;
+    rowsFiltradas.forEach((row) => {
+      /*
+       * La identidad real es reloj + código. Empresa o nombre pueden
+       * coincidir, pero jamás se deben mezclar asignaciones distintas.
+       */
+      const employeeKey = row.assignment_key;
+      const existente = empleadosAgrupados.get(employeeKey);
 
-    const existente = empleadosAgrupados.get(employeeKey);
+      if (!existente) {
+        empleadosAgrupados.set(employeeKey, {
+          area: row.area,
+          trabajador: row.trabajador,
+          codigo: row.codigo,
+          device_id: row.device_id,
+          assignment_key: row.assignment_key,
+          hora: row.hora || "06:00",
+          empresa: row.empresa,
+          cells: { ...row.cells },
+          incidents: { ...row.incidents },
+        });
 
-    if (!existente) {
-      empleadosAgrupados.set(employeeKey, {
-        area: row.area,
-        trabajador: row.trabajador,
-        codigo: row.codigo,
-        hora: row.hora || "06:00",
-        empresa: row.empresa,
-        cells: { ...row.cells },
-        incidents: { ...row.incidents },
-      });
-
-      return;
-    }
-
-    Object.entries(row.cells ?? {}).forEach(([fecha, value]) => {
-      const nuevoValor = String(value ?? "").trim();
-
-      if (!nuevoValor) return;
-
-      const valorActual = String(existente.cells[fecha] ?? "").trim();
-
-      if (!valorActual) {
-        existente.cells[fecha] = nuevoValor;
         return;
       }
 
-      const valoresActuales = valorActual
-        .split(" | ")
-        .map((item) => item.trim());
+      Object.entries(row.cells ?? {}).forEach(([fecha, value]) => {
+        const nuevoValor = String(value ?? "").trim();
 
-      if (!valoresActuales.includes(nuevoValor)) {
-        existente.cells[fecha] = `${valorActual} | ${nuevoValor}`;
+        if (!nuevoValor) return;
+
+        const valorActual = String(
+          existente.cells[fecha] ?? ""
+        ).trim();
+
+        if (!valorActual) {
+          existente.cells[fecha] = nuevoValor;
+          return;
+        }
+
+        const valoresActuales = valorActual
+          .split(" | ")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const valoresNuevos = nuevoValor
+          .split(" | ")
+          .map((item) => item.trim())
+          .filter(Boolean);
+
+        const combinados = Array.from(
+          new Set([...valoresActuales, ...valoresNuevos])
+        );
+
+        existente.cells[fecha] = combinados.join(" | ");
+      });
+
+      (
+        Object.entries(
+          row.incidents ?? {}
+        ) as [string, PrenominaIncident][]
+      ).forEach(([fecha, incident]) => {
+        if (!existente.incidents[fecha] && incident) {
+          existente.incidents[fecha] = incident;
+        }
+      });
+
+      if (!existente.area && row.area) {
+        existente.area = row.area;
+      }
+
+      if (!existente.empresa && row.empresa) {
+        existente.empresa = row.empresa;
+      }
+
+      if (!existente.hora && row.hora) {
+        existente.hora = row.hora;
       }
     });
 
-    Object.entries(row.incidents ?? {}).forEach(([fecha, incident]) => {
-      if (!existente.incidents[fecha] && incident) {
-        existente.incidents[fecha] = incident;
+    return Array.from(empleadosAgrupados.values()).sort(
+      (a, b) => {
+        const byName = a.trabajador.localeCompare(
+          b.trabajador,
+          "es",
+          { sensitivity: "base" }
+        );
+
+        if (byName !== 0) return byName;
+
+        return a.empresa.localeCompare(b.empresa, "es", {
+          sensitivity: "base",
+        });
       }
-    });
-
-    if (!existente.area && row.area) {
-      existente.area = row.area;
-    }
-
-    if (!existente.empresa && row.empresa) {
-      existente.empresa = row.empresa;
-    }
-
-    if (!existente.hora && row.hora) {
-      existente.hora = row.hora;
-    }
-  });
-
-  return Array.from(empleadosAgrupados.values()).sort((a, b) =>
-    a.trabajador.localeCompare(b.trabajador, "es", {
-      sensitivity: "base",
-    })
-  );
-}, [prenomina.rows, prenominaEmpleadosSeleccionados, empleados]);
+    );
+  }, [
+    prenomina.rows,
+    prenominaEmpleadosSeleccionados,
+  ]);
 
   const empleadosVisiblesPrenomina = useMemo(() => {
     return prenominaEmpleadosSeleccionados.length === 0
       ? empleados
       : empleados.filter((item) =>
-          prenominaEmpleadosSeleccionados.includes(item.codigo)
+          prenominaEmpleadosSeleccionados.includes(
+            item.assignment_key
+          )
         );
   }, [empleados, prenominaEmpleadosSeleccionados]);
 
   const empleadoSeleccionado = useMemo(() => {
-    return empleados.find((item) => item.codigo === empleado);
+    return empleados.find(
+      (item) => item.assignment_key === empleado
+    );
   }, [empleados, empleado]);
 
   const prenominaDays = useMemo(() => {
@@ -1087,24 +1235,41 @@ function AsistenciasPage() {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
                 {empleadosVisiblesPrenomina.length === 1 ? (
                   <div className="flex items-center rounded-md border border-input bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">
-                    {empleadoSeleccionado?.nombre ?? "Empleado seleccionado"}
+                    {empleadoSeleccionado
+                      ? `${empleadoSeleccionado.nombre}${
+                          empleadoSeleccionado.empresa
+                            ? ` — ${empleadoSeleccionado.empresa}`
+                            : ""
+                        }`
+                      : "Empleado seleccionado"}
                   </div>
                 ) : (
                   <select
                     value={empleado}
                     onChange={(e) => {
                       const value = e.target.value;
+                      const selectedEmployee =
+                        empleadosVisiblesPrenomina.find(
+                          (item) => item.assignment_key === value
+                        );
+
                       setEmpleado(value);
                       setIncidenciaForm((current) => ({
                         ...current,
-                        user_id: value,
+                        assignment_key: value,
+                        device_id: selectedEmployee?.device_id ?? null,
+                        user_id: selectedEmployee?.codigo ?? "",
                       }));
                     }}
                     className="rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     {empleadosVisiblesPrenomina.map((item) => (
-                      <option key={item.codigo} value={item.codigo}>
+                      <option
+                        key={item.assignment_key}
+                        value={item.assignment_key}
+                      >
                         {item.nombre}
+                        {item.empresa ? ` — ${item.empresa}` : ""}
                       </option>
                     ))}
                   </select>
@@ -1321,23 +1486,36 @@ function EmployeeMultiSelect({
   onChange: (value: string[]) => void;
 }) {
   const selectedSet = new Set(selected);
+  const selectedEmployee =
+    selected.length === 1
+      ? empleados.find(
+          (empleado) =>
+            empleado.assignment_key === selected[0]
+        )
+      : undefined;
+
   const label =
     selected.length === 0
       ? "Todos"
       : selected.length === 1
-        ? empleados.find((empleado) => empleado.codigo === selected[0])?.nombre ??
-          selected[0]
+        ? selectedEmployee
+          ? `${selectedEmployee.nombre}${
+              selectedEmployee.empresa
+                ? ` — ${selectedEmployee.empresa}`
+                : ""
+            }`
+          : selected[0]
         : `${selected.length} empleados seleccionados`;
 
-  const toggleEmployee = (codigo: string) => {
-    const normalizedCodigo = String(codigo).trim();
-
-    if (selectedSet.has(normalizedCodigo)) {
-      onChange(selected.filter((value) => value !== normalizedCodigo));
+  const toggleEmployee = (assignmentKey: string) => {
+    if (selectedSet.has(assignmentKey)) {
+      onChange(
+        selected.filter((value) => value !== assignmentKey)
+      );
       return;
     }
 
-    onChange([...selected, normalizedCodigo]);
+    onChange([...selected, assignmentKey]);
   };
 
   return (
@@ -1368,16 +1546,25 @@ function EmployeeMultiSelect({
         <div className="space-y-1">
           {empleados.map((empleado) => (
             <label
-              key={empleado.codigo}
+              key={empleado.assignment_key}
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-muted"
             >
               <input
                 type="checkbox"
-                checked={selectedSet.has(empleado.codigo)}
-                onChange={() => toggleEmployee(empleado.codigo)}
+                checked={selectedSet.has(
+                  empleado.assignment_key
+                )}
+                onChange={() =>
+                  toggleEmployee(empleado.assignment_key)
+                }
                 className="h-4 w-4"
               />
-              <span className="truncate">{empleado.nombre}</span>
+              <span className="truncate">
+                {empleado.nombre}
+                {empleado.empresa
+                  ? ` — ${empleado.empresa}`
+                  : ""}
+              </span>
             </label>
           ))}
         </div>
@@ -1415,6 +1602,9 @@ function TablaPrenomina({
         <thead>
           <tr className="bg-muted/70 text-muted-foreground uppercase tracking-wider">
             <th className="border border-border px-3 py-2 text-left font-semibold">
+              Empresa
+            </th>
+            <th className="border border-border px-3 py-2 text-left font-semibold">
               Área
             </th>
             <th className="border border-border px-3 py-2 text-left font-semibold">
@@ -1428,21 +1618,25 @@ function TablaPrenomina({
                 {day.label}
               </th>
             ))}
-            <th className="border border-border px-3 py-2 text-left font-semibold">
-              Empresa
-            </th>
           </tr>
         </thead>
 
         <tbody>
           {rows.map((row, rowIndex) => {
+            const previousRow = rowIndex > 0 ? rows[rowIndex - 1] : undefined;
+
             const sameAsPrev =
-              rowIndex > 0 && rows[rowIndex - 1].codigo === row.codigo;
+              Boolean(previousRow) &&
+              previousRow?.assignment_key === row.assignment_key;
+
             return (
             <tr
-              key={`${row.codigo}-${row.hora}-${rowIndex}`}
+              key={`${row.assignment_key}-${row.hora}-${rowIndex}`}
               className="hover:bg-muted/30 transition-colors"
             >
+              <td className="border border-border px-3 py-2">
+                {sameAsPrev ? "" : row.empresa}
+              </td>
               <td className="border border-border px-3 py-2">
                 {sameAsPrev ? "" : row.area}
               </td>
@@ -1468,7 +1662,7 @@ function TablaPrenomina({
 
                 const isEmptyCell = !cleanValue && !hasIncident;
                 const cellKey = getPrenominaCellKey(
-                  row.codigo,
+                  row.assignment_key,
                   row.hora,
                   day.date
                 );
@@ -1478,7 +1672,12 @@ function TablaPrenomina({
                   <td
                     key={day.date}
                     data-prenomina-incidencia="true"
-                    data-user-id={String(incident?.user_id ?? row.codigo)}
+                    data-assignment-key={
+                      incident?.assignment_key ?? row.assignment_key
+                    }
+                    data-user-id={String(
+                      incident?.user_id ?? row.codigo
+                    )}
                     data-fecha={day.date}
                     data-hora={row.hora}
                     data-prenomina-cell={cellKey}
@@ -1569,9 +1768,6 @@ function TablaPrenomina({
                   </td>
                 );
               })}
-              <td className="border border-border px-3 py-2">
-                {sameAsPrev ? "" : row.empresa}
-              </td>
             </tr>
             );
           })}
@@ -1593,7 +1789,7 @@ function TablaPrenomina({
 
       <div className="flex flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
-          Página {page} de {pages} • máximo 31 días por página
+          Página {page} de {pages} 
         </p>
 
         <div className="flex items-center gap-2">
@@ -1697,8 +1893,9 @@ function SpanishDatePicker({
                 }).format(date),
             }}
           />
+      
         </PopoverContent>
-      </Popover>2
+      </Popover>
     </div>
   );
 }

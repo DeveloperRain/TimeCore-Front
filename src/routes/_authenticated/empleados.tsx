@@ -826,6 +826,7 @@ function EmpleadosPage() {
                     </span>
                   </td>
 
+
                   <td className="px-5 py-3 text-muted-foreground">
                     {e.empresa || ""}
                   </td>
@@ -864,7 +865,7 @@ function EmpleadosPage() {
 
         <div className="flex flex-col gap-3 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
-            Página {page} de {totalPages} • Maximo {PAGE_SIZE} empleados por página 
+            Página {page} de {totalPages} 
           </p>
           <div className="flex items-center gap-2">
             <button

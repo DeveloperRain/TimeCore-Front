@@ -22,6 +22,7 @@ export class ApiError extends Error {
     details,
     requestId,
   }: {
+  
     message: string;
     status: number;
     code?: string;

@@ -213,6 +213,7 @@ export const timecoreApi = {
 
   guardarIncidenciaPrenomina: (data: {
     id?: number;
+    device_id: number;
     user_id: string;
     fecha: string;
     hora: string;
@@ -327,6 +328,14 @@ export const timecoreApi = {
   activarDevice: (id: number) =>
     request(`/db/devices/${id}/activate`, {
       method: "PUT",
+    }),
+
+  getDeviceTimeStatus: (id: number) =>
+    request(`/db/devices/${id}/time-status`),
+
+  syncDeviceTime: (id: number) =>
+    request(`/db/devices/${id}/sync-time`, {
+      method: "POST",
     }),
 
   // =========================

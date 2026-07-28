@@ -29,6 +29,11 @@ type RelojFront = {
   syncIntervalMinutes: number;
   activo: boolean;
   branch_id?: number | null;
+  horaReloj?: string;
+  horaServidor?: string;
+  desfaseSegundos?: number;
+  horaCorrecta?: boolean;
+  horaRevisada?: boolean;
 };
 
 type SucursalFront = {
@@ -97,6 +102,9 @@ function RelojesPage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [syncingId, setSyncingId] = useState<number | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [checkingTimeId, setCheckingTimeId] = useState<number | null>(null);
+  const [syncingTimeId, setSyncingTimeId] = useState<number | null>(null);
   const [editing, setEditing] = useState<RelojFront | null>(null);
 
   const [form, setForm] = useState({
@@ -118,19 +126,29 @@ function RelojesPage() {
   }, [branchId]);
 
   useEffect(() => {
+    const deviceOperationInProgress =
+      syncingAll ||
+      syncingId !== null ||
+      checkingTimeId !== null ||
+      syncingTimeId !== null;
+
     const initialTimer = window.setTimeout(() => {
-      if (!document.hidden) actualizarEstadosRelojes();
+      if (!document.hidden && !deviceOperationInProgress) {
+        actualizarEstadosRelojes();
+      }
     }, 300);
 
     const interval = window.setInterval(() => {
-      if (!document.hidden) actualizarEstadosRelojes();
+      if (!document.hidden && !deviceOperationInProgress) {
+        actualizarEstadosRelojes();
+      }
     }, 5000);
 
     return () => {
       window.clearTimeout(initialTimer);
       window.clearInterval(interval);
     };
-  }, [branchId]);
+  }, [branchId, syncingAll, syncingId, checkingTimeId, syncingTimeId]);
 
   const normalizarEstadoReloj = (r: any): RelojFront["estado"] => {
     if (!Boolean(r.activo ?? r.is_active ?? true)) {
@@ -177,6 +195,18 @@ function RelojesPage() {
       r.branch_id !== undefined && r.branch_id !== null
         ? Number(r.branch_id)
         : null,
+    horaReloj: r.device_time ? String(r.device_time) : undefined,
+    horaServidor: r.server_time ? String(r.server_time) : undefined,
+    desfaseSegundos:
+      r.drift_seconds !== undefined && r.drift_seconds !== null
+        ? Number(r.drift_seconds)
+        : undefined,
+    horaCorrecta:
+      r.in_sync !== undefined && r.in_sync !== null
+        ? Boolean(r.in_sync)
+        : undefined,
+    horaRevisada:
+      r.in_sync !== undefined && r.in_sync !== null,
   });
 
   const cargarSucursales = () => {
@@ -252,6 +282,156 @@ function RelojesPage() {
       .catch((err) => {
         console.error("Error verificando estado de relojes:", err);
       });
+  };
+
+  const actualizarHoraEnReloj = (id: number, data: any) => {
+    setRelojes((actuales) =>
+      actuales.map((reloj) =>
+        reloj.id === id
+          ? {
+              ...reloj,
+              horaReloj: data.device_time
+                ? String(data.device_time)
+                : reloj.horaReloj,
+              horaServidor: data.server_time
+                ? String(data.server_time)
+                : reloj.horaServidor,
+              desfaseSegundos: Number(data.drift_seconds ?? 0),
+              horaCorrecta: Boolean(data.in_sync),
+              horaRevisada: true,
+            }
+          : reloj
+      )
+    );
+  };
+
+  const ajustarHoraReloj = async (
+    id: number,
+    pedirConfirmacion = true
+  ) => {
+    const reloj = relojes.find((item) => item.id === id);
+
+    if (pedirConfirmacion) {
+      const confirmar = window.confirm(
+        `¿Deseas ajustar la fecha y hora de ${
+          reloj?.nombre ?? "este reloj"
+        } con la hora actual del servidor?`
+      );
+
+      if (!confirmar) return null;
+    }
+
+    setSyncingTimeId(id);
+
+    try {
+      const res = await timecoreApi.syncDeviceTime(id);
+      const data = res?.data ?? {};
+      actualizarHoraEnReloj(id, data);
+
+      if (!data.in_sync) {
+        throw new Error(
+          "El reloj no confirmó el cambio y continúa con una hora incorrecta."
+        );
+      }
+
+      window.alert(
+        `Fecha y hora actualizadas y verificadas correctamente.
+
+` +
+          `Hora del reloj: ${formatClockValue(data.device_time)}
+` +
+          `Hora del servidor: ${formatClockValue(data.server_time)}`
+      );
+
+      return data;
+    } catch (err) {
+      console.error("Error ajustando la hora del reloj:", err);
+      window.alert(
+        getErrorMessage(
+          err,
+          "No se pudo actualizar y verificar la fecha y hora del reloj."
+        )
+      );
+      return null;
+    } finally {
+      setSyncingTimeId(null);
+    }
+  };
+
+  const revisarHoraReloj = async (
+    id: number,
+    mostrarMensaje = true
+  ) => {
+    setCheckingTimeId(id);
+
+    try {
+      const res = await timecoreApi.getDeviceTimeStatus(id);
+      const data = res?.data ?? {};
+      actualizarHoraEnReloj(id, data);
+
+      if (mostrarMensaje) {
+        if (data.in_sync) {
+          window.alert(
+            `La fecha y hora del reloj son correctas.
+
+` +
+              `Hora del reloj: ${formatClockValue(data.device_time)}
+` +
+              `Hora del servidor: ${formatClockValue(data.server_time)}`
+          );
+        } else {
+          const desfase = Math.abs(Number(data.drift_seconds ?? 0));
+          const confirmarAjuste = window.confirm(
+            `La fecha y hora del reloj están desfasadas por aproximadamente ${Math.max(
+              1,
+              Math.round(desfase / 60)
+            )} minuto(s).
+
+` +
+              `Hora del reloj: ${formatClockValue(data.device_time)}
+` +
+              `Hora del servidor: ${formatClockValue(data.server_time)}
+
+` +
+              `¿Deseas ajustarlas ahora?`
+          );
+
+          if (confirmarAjuste) {
+            // El ajuste se verifica con una conexión nueva en el backend.
+            window.setTimeout(() => {
+              void ajustarHoraReloj(id, false);
+            }, 0);
+          }
+        }
+      }
+
+      return data;
+    } catch (err) {
+      console.error("Error verificando la hora del reloj:", err);
+
+      if (mostrarMensaje) {
+        window.alert(
+          getErrorMessage(
+            err,
+            "No se pudo consultar la fecha y hora del reloj."
+          )
+        );
+      }
+
+      return null;
+    } finally {
+      setCheckingTimeId(null);
+    }
+  };
+
+  const formatClockValue = (value?: string) => {
+    if (!value) return "";
+
+    const parsed = new Date(value);
+
+    if (Number.isNaN(parsed.getTime())) return value;
+
+    return parsed.toLocaleString("es-MX");
   };
 
   const sucursalesVisibles = useMemo(() => {
@@ -351,50 +531,172 @@ function RelojesPage() {
       });
   };
 
-  const sincronizarReloj = (id: number) => {
+  const sincronizarReloj = async (id: number) => {
     setSyncingId(id);
 
-    timecoreApi
-      .sincronizarDevice(id)
-      .then((res) => {
-        const data = res.data ?? {};
-        const ip = data.ip ?? relojes.find((reloj) => reloj.id === id)?.ip ?? "";
-        const obtainedEvents =
-          data.attendance_obtained ??
-          data.events_obtained ??
-          data.attendance_synced ??
-          0;
-        const downloadedEvents =
-          data.attendance_synced ?? data.events_downloaded ?? 0;
+    try {
+      const clockStatus = await revisarHoraReloj(id, false);
 
-        showSyncLog([
-          {
-            time: getCurrentTime(),
-            message: ip ? `Conectando '${ip}'` : "Conectando al reloj",
-          },
-          {
-            time: getCurrentTime(),
-            message: "Descargando",
-          },
-          {
-            time: getCurrentTime(),
-            message: `Datos en el reloj: ${obtainedEvents} Datos`,
-          },
-          {
-            time: getCurrentTime(),
-            message: `Se descargaron ${downloadedEvents} eventos`,
-          },
-        ]);
+      if (!clockStatus) {
+        window.alert(
+          "No se pudo comprobar la fecha y hora del reloj. No se descargaron asistencias."
+        );
+        return;
+      }
 
-        cargarRelojes();
-      })
-      .catch((err) => {
-        console.error("Error sincronizando reloj:", err);
-        alert("No se pudo sincronizar el reloj");
-      })
-      .finally(() => {
-        setSyncingId(null);
+      if (!clockStatus.in_sync) {
+        const desfase = Math.abs(Number(clockStatus.drift_seconds ?? 0));
+
+        window.alert(
+          `La sincronización fue bloqueada porque la fecha y hora del reloj están desfasadas por aproximadamente ${Math.max(
+            1,
+            Math.round(desfase / 60)
+          )} minuto(s). Usa el botón "Ajustar hora" antes de sincronizar.`
+        );
+        return;
+      }
+
+      const res = await timecoreApi.sincronizarDevice(id);
+      const data = res.data ?? {};
+      const ip = data.ip ?? relojes.find((reloj) => reloj.id === id)?.ip ?? "";
+      const obtainedEvents =
+        data.attendance_obtained ??
+        data.events_obtained ??
+        data.attendance_synced ??
+        0;
+      const downloadedEvents =
+        data.attendance_synced ?? data.events_downloaded ?? 0;
+
+      if (data.clock_status) {
+        actualizarHoraEnReloj(id, data.clock_status);
+      }
+
+      showSyncLog([
+        {
+          time: getCurrentTime(),
+          message: ip ? `Conectando '${ip}'` : "Conectando al reloj",
+        },
+        {
+          time: getCurrentTime(),
+          message: "Fecha y hora verificadas",
+        },
+        {
+          time: getCurrentTime(),
+          message: "Descargando",
+        },
+        {
+          time: getCurrentTime(),
+          message: `Datos en el reloj: ${obtainedEvents} Datos`,
+        },
+        {
+          time: getCurrentTime(),
+          message: `Se descargaron ${downloadedEvents} eventos`,
+        },
+      ]);
+
+      cargarRelojes();
+    } catch (err) {
+      console.error("Error sincronizando reloj:", err);
+      window.alert(
+        getErrorMessage(err, "No se pudo sincronizar el reloj")
+      );
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const sincronizarTodosLosRelojes = async () => {
+    if (syncingAll || syncingId !== null) return;
+
+    const relojesActivos = relojes.filter((reloj) => reloj.activo);
+
+    if (relojesActivos.length === 0) {
+      window.alert("No hay relojes activos para sincronizar.");
+      return;
+    }
+
+    setSyncingAll(true);
+
+    const logRows: { time: string; message: string }[] = [
+      {
+        time: getCurrentTime(),
+        message: `Iniciando sincronización de ${relojesActivos.length} reloj(es)`,
+      },
+    ];
+
+    let sincronizados = 0;
+    let fallidos = 0;
+    let eventosDescargados = 0;
+
+    try {
+      /*
+       * Se sincronizan uno por uno para no abrir conexiones simultáneas
+       * innecesarias con los dispositivos biométricos.
+       */
+      for (const reloj of relojesActivos) {
+        logRows.push({
+          time: getCurrentTime(),
+          message: `Conectando '${reloj.ip}'`,
+        });
+
+        try {
+          const res = await timecoreApi.sincronizarDevice(reloj.id);
+          const data = res?.data ?? {};
+
+          const descargados = Number(
+            data.attendance_synced ??
+              data.events_downloaded ??
+              data.downloaded_events ??
+              0
+          );
+
+          eventosDescargados += Number.isFinite(descargados)
+            ? descargados
+            : 0;
+          sincronizados += 1;
+
+          if (data.clock_status) {
+            actualizarHoraEnReloj(reloj.id, data.clock_status);
+          }
+
+          logRows.push({
+            time: getCurrentTime(),
+            message: `${reloj.nombre}: sincronizado correctamente`,
+          });
+        } catch (err) {
+          fallidos += 1;
+          console.error(`Error sincronizando ${reloj.nombre}:`, err);
+
+          logRows.push({
+            time: getCurrentTime(),
+            message: `${reloj.nombre}: no se pudo sincronizar`,
+          });
+        }
+      }
+
+      logRows.push({
+        time: getCurrentTime(),
+        message: `Resultado: ${sincronizados} sincronizado(s), ${fallidos} con error`,
       });
+
+      logRows.push({
+        time: getCurrentTime(),
+        message: `Se descargaron ${eventosDescargados} eventos nuevos`,
+      });
+
+      showSyncLog(logRows);
+
+      cargarRelojes();
+      actualizarEstadosRelojes();
+
+      if (fallidos > 0) {
+        window.alert(
+          `La sincronización terminó con ${fallidos} reloj(es) sin completar. Revisa el resumen de sincronización.`
+        );
+      }
+    } finally {
+      setSyncingAll(false);
+    }
   };
 
   const totalRelojes = relojes.length;
@@ -454,6 +756,24 @@ function RelojesPage() {
           </div>
         </div>
       )}
+
+      <div className="mb-4 flex justify-start">
+        <button
+          type="button"
+          disabled={
+            syncingAll ||
+            syncingId !== null ||
+            relojes.filter((reloj) => reloj.activo).length === 0
+          }
+          onClick={sincronizarTodosLosRelojes}
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${syncingAll ? "animate-spin" : ""}`}
+          />
+          {syncingAll ? "Sincronizando Todo..." : "Sincronizar Todo"}
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <StatCard
@@ -581,7 +901,13 @@ function RelojesPage() {
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <button
-                        disabled={!r.activo || syncingId === r.id}
+                        disabled={
+                          syncingAll ||
+                          !r.activo ||
+                          syncingId === r.id ||
+                          syncingTimeId === r.id ||
+                          checkingTimeId === r.id
+                        }
                         onClick={() => {
                           if (!r.activo) return;
                           sincronizarReloj(r.id);
