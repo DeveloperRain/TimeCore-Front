@@ -6,7 +6,7 @@ import {
   getExcelPrenominaUrl,
   timecoreApi,
 } from "@/lib/api/timecore";
-import { CalendarIcon, Download, Filter, Save, Trash2, X } from "lucide-react";
+import { CalendarIcon, Download, Filter, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { es } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -79,6 +79,7 @@ type PrenominaIncident = {
 
 type PrenominaRow = {
   area: string;
+  sucursal: string;
   trabajador: string;
   codigo: string;
   device_id: number | null;
@@ -86,7 +87,7 @@ type PrenominaRow = {
   hora: string;
   empresa: string;
   cells: Record<string, string>;
-  incidents: Record<string, PrenominaIncident>;
+  incidents: Record<string, PrenominaIncident[]>;
 };
 
 type PrenominaData = {
@@ -114,6 +115,91 @@ const EMPTY_PRENOMINA: PrenominaData = {
   hours: [],
   rows: [],
 };
+
+type HsvColor = {
+  h: number;
+  s: number;
+  v: number;
+};
+
+function normalizeHexColor(value: string) {
+  const raw = String(value ?? "").trim().toUpperCase();
+
+  if (/^#[0-9A-F]{6}$/.test(raw)) {
+    return raw;
+  }
+
+  return "#BAE6FD";
+}
+
+function hexToHsv(hex: string): HsvColor {
+  const normalized = normalizeHexColor(hex);
+  const r = Number.parseInt(normalized.slice(1, 3), 16) / 255;
+  const g = Number.parseInt(normalized.slice(3, 5), 16) / 255;
+  const b = Number.parseInt(normalized.slice(5, 7), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+
+  let h = 0;
+
+  if (delta !== 0) {
+    if (max === r) {
+      h = 60 * (((g - b) / delta) % 6);
+    } else if (max === g) {
+      h = 60 * ((b - r) / delta + 2);
+    } else {
+      h = 60 * ((r - g) / delta + 4);
+    }
+  }
+
+  if (h < 0) h += 360;
+
+  return {
+    h,
+    s: max === 0 ? 0 : delta / max,
+    v: max,
+  };
+}
+
+function hsvToHex({ h, s, v }: HsvColor) {
+  const chroma = v * s;
+  const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1));
+  const match = v - chroma;
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (h < 60) {
+    r = chroma;
+    g = x;
+  } else if (h < 120) {
+    r = x;
+    g = chroma;
+  } else if (h < 180) {
+    g = chroma;
+    b = x;
+  } else if (h < 240) {
+    g = x;
+    b = chroma;
+  } else if (h < 300) {
+    r = x;
+    b = chroma;
+  } else {
+    r = chroma;
+    b = x;
+  }
+
+  const toHex = (channel: number) =>
+    Math.round((channel + match) * 255)
+      .toString(16)
+      .padStart(2, "0")
+      .toUpperCase();
+
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
 
 function makeAssignmentKey(
   deviceId: number | null | undefined,
@@ -158,40 +244,70 @@ function normalizePrenominaData(rawData: any): PrenominaData {
       );
 
       const incidentsSource = row.incidents ?? row.incidencias ?? {};
-      const incidents: Record<string, PrenominaIncident> = {};
+      const incidents: Record<string, PrenominaIncident[]> = {};
 
       Object.entries(incidentsSource).forEach(([fecha, value]: [string, any]) => {
-        if (!value) return;
+        const rawIncidents = Array.isArray(value) ? value : [value];
 
-        const incidentDeviceId =
-          value.device_id !== undefined && value.device_id !== null
-            ? Number(value.device_id)
-            : deviceId;
-        const incidentUserId = String(
-          value.user_id ?? codigo ?? trabajador
-        );
+        const normalizedIncidents = rawIncidents
+          .filter(Boolean)
+          .map((incidentValue: any): PrenominaIncident => {
+            const incidentDeviceId =
+              incidentValue.device_id !== undefined &&
+              incidentValue.device_id !== null
+                ? Number(incidentValue.device_id)
+                : deviceId;
+            const incidentUserId = String(
+              incidentValue.user_id ?? codigo ?? trabajador
+            );
 
-        incidents[fecha] = {
-          id: Number(value.id ?? 0),
-          device_id: incidentDeviceId,
-          assignment_key: String(
-            value.assignment_key ??
-              makeAssignmentKey(incidentDeviceId, incidentUserId)
-          ),
-          user_id: incidentUserId,
-          fecha: String(value.fecha ?? fecha),
-          hora: String(value.hora ?? row.hora ?? ""),
-          incidencia: String(value.incidencia ?? value.type ?? ""),
-          descripcion: value.descripcion,
-          color: String(value.color ?? "#BAE6FD"),
-          source_fecha: value.source_fecha ? String(value.source_fecha) : undefined,
-          source_hora: value.source_hora ? String(value.source_hora) : undefined,
-          moved_attendance: value.moved_attendance ? String(value.moved_attendance) : undefined,
-        };
+            return {
+              id: Number(incidentValue.id ?? 0),
+              device_id: incidentDeviceId,
+              assignment_key: String(
+                incidentValue.assignment_key ??
+                  makeAssignmentKey(incidentDeviceId, incidentUserId)
+              ),
+              user_id: incidentUserId,
+              fecha: String(incidentValue.fecha ?? fecha),
+              hora: String(incidentValue.hora ?? row.hora ?? ""),
+              incidencia: String(
+                incidentValue.incidencia ?? incidentValue.type ?? ""
+              ),
+              descripcion: incidentValue.descripcion,
+              color: normalizeHexColor(
+                String(incidentValue.color ?? "#BAE6FD")
+              ),
+              source_fecha: incidentValue.source_fecha
+                ? String(incidentValue.source_fecha)
+                : undefined,
+              source_hora: incidentValue.source_hora
+                ? String(incidentValue.source_hora)
+                : undefined,
+              moved_attendance: incidentValue.moved_attendance
+                ? String(incidentValue.moved_attendance)
+                : undefined,
+            };
+          })
+          .sort((a, b) => {
+            const byHour = a.hora.localeCompare(b.hora);
+            return byHour !== 0 ? byHour : a.id - b.id;
+          });
+
+        if (normalizedIncidents.length > 0) {
+          incidents[fecha] = normalizedIncidents;
+        }
       });
 
       return {
         area: String(row.area ?? row.department ?? row.departamento ?? ""),
+        sucursal: String(
+          row.sucursal ??
+            row.branch_name ??
+            row.nombre_sucursal ??
+            row.branch?.name ??
+            ""
+        ),
         trabajador: trabajador || codigo || `Empleado ${index + 1}`,
         codigo: codigo || trabajador || `empleado-${index + 1}`,
         device_id: deviceId,
@@ -807,26 +923,26 @@ function AsistenciasPage() {
       return;
     }
 
-    if (incidenciaForm.id) {
-      pendingScrollIncidentRef.current = {
-        assignmentKey: empleadoObjetivo.assignment_key,
-        fecha: incidenciaForm.fecha,
-        hora: incidenciaForm.hora,
-      };
+    if (!/^#[0-9A-F]{6}$/i.test(incidenciaForm.color)) {
+      window.alert("Escribe un color hexadecimal válido. Ejemplo: #BAE6FD.");
+      return;
     }
+
+    pendingScrollIncidentRef.current = {
+      assignmentKey: empleadoObjetivo.assignment_key,
+      fecha: incidenciaForm.fecha,
+      hora: incidenciaForm.hora,
+    };
 
     setSavingIncident(true);
 
     try {
       /*
-       * Se elimina sólo la incidencia anterior y se crea en la nueva fecha.
-       * Las asistencias permanecen ligadas al reloj y al día reales.
+       * Cuando existe id se actualiza únicamente esa incidencia. Cuando no
+       * existe id se crea una nueva, aunque ya haya otras el mismo día y hora.
        */
-      if (incidenciaForm.id) {
-        await timecoreApi.eliminarIncidenciaPrenomina(incidenciaForm.id);
-      }
-
       await timecoreApi.guardarIncidenciaPrenomina({
+        id: incidenciaForm.id,
         device_id: empleadoObjetivo.device_id,
         user_id: empleadoObjetivo.codigo,
         fecha: incidenciaForm.fecha,
@@ -858,15 +974,13 @@ function AsistenciasPage() {
     }
   };
 
-  const seleccionarCeldaPrenomina = (
+  const obtenerEmpleadoDeFila = (
     row: PrenominaRow,
-    day: PrenominaDay
+    incident?: PrenominaIncident
   ) => {
-    const incident = row.incidents[day.date];
-    const assignmentKey =
-      incident?.assignment_key || row.assignment_key;
+    const assignmentKey = incident?.assignment_key || row.assignment_key;
 
-    const owner =
+    return (
       empleados.find(
         (item) => item.assignment_key === assignmentKey
       ) ??
@@ -874,7 +988,24 @@ function AsistenciasPage() {
         (item) =>
           item.device_id === row.device_id &&
           item.codigo === row.codigo
-      );
+      )
+    );
+  };
+
+  const desplazarAFormularioIncidencia = () => {
+    window.setTimeout(() => {
+      incidenciaFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 0);
+  };
+
+  const prepararNuevaIncidencia = (
+    row: PrenominaRow,
+    day: PrenominaDay
+  ) => {
+    const owner = obtenerEmpleadoDeFila(row);
 
     if (!owner) {
       window.alert(
@@ -885,25 +1016,52 @@ function AsistenciasPage() {
 
     setEmpleado(owner.assignment_key);
     setIncidenciaForm({
-      id: incident?.id,
+      id: undefined,
       assignment_key: owner.assignment_key,
       device_id: owner.device_id,
       user_id: owner.codigo,
       fecha: day.date,
-      hora: incident?.hora ?? row.hora,
-      incidencia: incident?.incidencia ?? "",
-      color: incident?.color ?? "#BAE6FD",
-      original_assignment_key: incident?.assignment_key,
-      original_fecha: incident?.fecha,
-      original_hora: incident?.hora,
+      hora: row.hora || "06:00",
+      incidencia: "",
+      color: "#BAE6FD",
+      original_assignment_key: undefined,
+      original_fecha: undefined,
+      original_hora: undefined,
     });
 
-    window.setTimeout(() => {
-      incidenciaFormRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }, 0);
+    desplazarAFormularioIncidencia();
+  };
+
+  const editarIncidencia = (
+    row: PrenominaRow,
+    day: PrenominaDay,
+    incident: PrenominaIncident
+  ) => {
+    const owner = obtenerEmpleadoDeFila(row, incident);
+
+    if (!owner) {
+      window.alert(
+        "No se pudo identificar la asignación del empleado en ese reloj."
+      );
+      return;
+    }
+
+    setEmpleado(owner.assignment_key);
+    setIncidenciaForm({
+      id: incident.id,
+      assignment_key: owner.assignment_key,
+      device_id: owner.device_id,
+      user_id: owner.codigo,
+      fecha: day.date,
+      hora: incident.hora || row.hora || "06:00",
+      incidencia: incident.incidencia,
+      color: incident.color || "#BAE6FD",
+      original_assignment_key: incident.assignment_key,
+      original_fecha: incident.fecha,
+      original_hora: incident.hora,
+    });
+
+    desplazarAFormularioIncidencia();
   };
 
   const limpiarIncidencia = () => {
@@ -963,14 +1121,11 @@ function AsistenciasPage() {
         return true;
       }
 
-      return (
-        Object.values(
-          row.incidents ?? {}
-        ) as PrenominaIncident[]
-      ).some(
-        (incident) =>
-          incident &&
-          selectedAssignments.has(incident.assignment_key)
+      return Object.values(row.incidents ?? {}).some(
+        (incidentList) =>
+          incidentList.some((incident) =>
+            selectedAssignments.has(incident.assignment_key)
+          )
       );
     });
 
@@ -982,19 +1137,42 @@ function AsistenciasPage() {
        * coincidir, pero jamás se deben mezclar asignaciones distintas.
        */
       const employeeKey = row.assignment_key;
+      const empleadoRelacionado =
+        empleados.find(
+          (item) => item.assignment_key === row.assignment_key
+        ) ??
+        empleados.find(
+          (item) =>
+            item.device_id === row.device_id &&
+            item.codigo === row.codigo
+        );
+
+      const areaFila = row.area || empleadoRelacionado?.area || "";
+      const sucursalFila =
+        row.sucursal || empleadoRelacionado?.sucursal || "Sin sucursal";
+      const empresaFila =
+        row.empresa || empleadoRelacionado?.empresa || "";
+
       const existente = empleadosAgrupados.get(employeeKey);
 
       if (!existente) {
         empleadosAgrupados.set(employeeKey, {
-          area: row.area,
-          trabajador: row.trabajador,
+          area: areaFila,
+          sucursal: sucursalFila,
+          trabajador:
+            row.trabajador || empleadoRelacionado?.nombre || row.codigo,
           codigo: row.codigo,
           device_id: row.device_id,
           assignment_key: row.assignment_key,
           hora: row.hora || "06:00",
-          empresa: row.empresa,
+          empresa: empresaFila,
           cells: { ...row.cells },
-          incidents: { ...row.incidents },
+          incidents: Object.fromEntries(
+            Object.entries(row.incidents).map(([fecha, incidentList]) => [
+              fecha,
+              [...incidentList],
+            ])
+          ),
         });
 
         return;
@@ -1030,22 +1208,46 @@ function AsistenciasPage() {
         existente.cells[fecha] = combinados.join(" | ");
       });
 
-      (
-        Object.entries(
-          row.incidents ?? {}
-        ) as [string, PrenominaIncident][]
-      ).forEach(([fecha, incident]) => {
-        if (!existente.incidents[fecha] && incident) {
-          existente.incidents[fecha] = incident;
-        }
-      });
+      Object.entries(row.incidents ?? {}).forEach(
+        ([fecha, incidentList]) => {
+          const currentList = existente.incidents[fecha] ?? [];
+          const incidentsByKey = new Map<string, PrenominaIncident>();
 
-      if (!existente.area && row.area) {
-        existente.area = row.area;
+          [...currentList, ...incidentList].forEach((incident) => {
+            const incidentKey = incident.id
+              ? `id:${incident.id}`
+              : [
+                  incident.assignment_key,
+                  incident.fecha,
+                  incident.hora,
+                  incident.incidencia,
+                ].join("|");
+
+            incidentsByKey.set(incidentKey, incident);
+          });
+
+          existente.incidents[fecha] = Array.from(
+            incidentsByKey.values()
+          ).sort((a, b) => {
+            const byHour = a.hora.localeCompare(b.hora);
+            return byHour !== 0 ? byHour : a.id - b.id;
+          });
+        }
+      );
+
+      if (!existente.area && areaFila) {
+        existente.area = areaFila;
       }
 
-      if (!existente.empresa && row.empresa) {
-        existente.empresa = row.empresa;
+      if (
+        (!existente.sucursal || existente.sucursal === "Sin sucursal") &&
+        sucursalFila
+      ) {
+        existente.sucursal = sucursalFila;
+      }
+
+      if (!existente.empresa && empresaFila) {
+        existente.empresa = empresaFila;
       }
 
       if (!existente.hora && row.hora) {
@@ -1071,6 +1273,7 @@ function AsistenciasPage() {
   }, [
     prenomina.rows,
     prenominaEmpleadosSeleccionados,
+    empleados,
   ]);
 
   const empleadosVisiblesPrenomina = useMemo(() => {
@@ -1301,29 +1504,20 @@ function AsistenciasPage() {
                       incidencia: e.target.value,
                     }))
                   }
-                  placeholder="Incidencia obligatoria. Ej. VACACIONES"
+                  placeholder="Incidencia obligatoria."
                   className="rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
 
 
-                <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
-                  <input
-                    type="color"
-                    value={incidenciaForm.color}
-                    onChange={(e) =>
-                      setIncidenciaForm((current) => ({
-                        ...current,
-                        color: e.target.value.toUpperCase(),
-                      }))
-                    }
-                    className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0"
-                    title="Color de la incidencia"
-                    aria-label="Color de la incidencia"
-                  />
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Color
-                  </span>
-                </div>
+                <HexColorPicker
+                  value={incidenciaForm.color}
+                  onChange={(color) =>
+                    setIncidenciaForm((current) => ({
+                      ...current,
+                      color,
+                    }))
+                  }
+                />
 
                 <button
                   type="button"
@@ -1361,7 +1555,8 @@ function AsistenciasPage() {
             pages={prenominaTotalPages}
             total={prenominaDays.length}
             onPageChange={setPrenominaPage}
-            onSelectCell={seleccionarCeldaPrenomina}
+            onAddIncident={prepararNuevaIncidencia}
+            onEditIncident={editarIncidencia}
             onDeleteIncident={borrarIncidencia}
             highlightedCell={highlightedCell}
           />
@@ -1391,24 +1586,31 @@ function TablaAsistencias({
       <table className="w-full min-w-[1000px] text-sm">
         <thead className="bg-muted/60 text-muted-foreground text-xs uppercase tracking-wider">
           <tr>
+            <th className="text-left font-semibold px-5 py-3">Empresa</th>
             <th className="text-left font-semibold px-5 py-3">Área</th>
-            <th className="text-left font-semibold px-5 py-3">Empleado</th>
             <th className="text-left font-semibold px-5 py-3">Sucursal</th>
+            <th className="text-left font-semibold px-5 py-3">Empleado</th>
             <th className="text-left font-semibold px-5 py-3">Fecha</th>
             <th className="text-left font-semibold px-5 py-3">Entrada</th>
             <th className="text-left font-semibold px-5 py-3">Estado</th>
-            <th className="text-left font-semibold px-5 py-3">Empresa</th>
           </tr>
         </thead>
 
         <tbody className="divide-y divide-border">
           {registros.map((a) => (
             <tr key={a.id} className="hover:bg-muted/40 transition-colors">
+
+              <td className="px-5 py-3 text-muted-foreground">{a.empresa}</td>
+
               <td className="px-5 py-3 text-foreground">{a.area}</td>
+
+              <td className="px-5 py-3 text-foreground">{a.sucursal}</td>
+              
               <td className="px-5 py-3 font-medium text-foreground">
                 {a.trabajador}
+                
               </td>
-              <td className="px-5 py-3 text-foreground">{a.sucursal}</td>
+              
               <td className="px-5 py-3 text-muted-foreground tabular-nums">
                 {a.fecha}
               </td>
@@ -1430,7 +1632,7 @@ function TablaAsistencias({
                   {a.estado}
                 </span>
               </td>
-              <td className="px-5 py-3 text-muted-foreground">{a.empresa}</td>
+            
             </tr>
           ))}
 
@@ -1577,7 +1779,8 @@ function TablaPrenomina({
   days,
   rows,
   hasSelectedEmployee,
-  onSelectCell,
+  onAddIncident,
+  onEditIncident,
   onDeleteIncident,
   highlightedCell,
   page,
@@ -1588,7 +1791,12 @@ function TablaPrenomina({
   days: PrenominaDay[];
   rows: PrenominaRow[];
   hasSelectedEmployee: boolean;
-  onSelectCell: (row: PrenominaRow, day: PrenominaDay) => void;
+  onAddIncident: (row: PrenominaRow, day: PrenominaDay) => void;
+  onEditIncident: (
+    row: PrenominaRow,
+    day: PrenominaDay,
+    incident: PrenominaIncident
+  ) => void;
   onDeleteIncident: (incidentId: number) => void;
   highlightedCell: string | null;
   page: number;
@@ -1606,6 +1814,9 @@ function TablaPrenomina({
             </th>
             <th className="border border-border px-3 py-2 text-left font-semibold">
               Área
+            </th>
+            <th className="border border-border px-3 py-2 text-left font-semibold">
+              Sucursal
             </th>
             <th className="border border-border px-3 py-2 text-left font-semibold">
               Trabajador
@@ -1640,17 +1851,17 @@ function TablaPrenomina({
               <td className="border border-border px-3 py-2">
                 {sameAsPrev ? "" : row.area}
               </td>
+              <td className="border border-border px-3 py-2">
+                {sameAsPrev ? "" : row.sucursal}
+              </td>
               <td className="border border-border px-3 py-2 font-medium">
                 {sameAsPrev ? "" : row.trabajador}
               </td>
               {days.map((day) => {
                 const value = row.cells[day.date] ?? "";
-                const incident = row.incidents[day.date];
-                const hasIncident = Boolean(incident);
+                const incidents = row.incidents[day.date] ?? [];
+                const hasIncident = incidents.length > 0;
                 const cleanValue = String(value ?? "").trim();
-                const incidentLabel = String(
-                  incident?.incidencia ?? "Incidencia"
-                ).trim();
 
                 const dateTimeLines = Array.from(
                   new Set(
@@ -1672,12 +1883,8 @@ function TablaPrenomina({
                   <td
                     key={day.date}
                     data-prenomina-incidencia="true"
-                    data-assignment-key={
-                      incident?.assignment_key ?? row.assignment_key
-                    }
-                    data-user-id={String(
-                      incident?.user_id ?? row.codigo
-                    )}
+                    data-assignment-key={row.assignment_key}
+                    data-user-id={String(row.codigo)}
                     data-fecha={day.date}
                     data-hora={row.hora}
                     data-prenomina-cell={cellKey}
@@ -1686,85 +1893,112 @@ function TablaPrenomina({
                         ? "z-10 ring-4 ring-primary ring-inset"
                         : ""
                     }`}
-                    style={
-                      hasIncident
-                        ? { backgroundColor: incident.color || "#BAE6FD" }
-                        : undefined
-                    }
+                    onDoubleClick={(event) => {
+                      const target = event.target as HTMLElement;
+
+                      if (target.closest("[data-incident-action]")) {
+                        return;
+                      }
+
+                      onAddIncident(row, day);
+                    }}
                   >
-                    <button
-                      type="button"
-                      onDoubleClick={() => onSelectCell(row, day)}
-                      className={`min-h-14 w-full px-3 py-2 text-[11px] hover:bg-primary/10 ${
-                        hasIncident ? "pr-8" : ""
-                      } ${
+                    <div
+                      className={`flex min-h-14 w-full flex-col gap-2 px-2 py-2 text-[11px] ${
                         isEmptyCell
                           ? "italic text-muted-foreground"
                           : "text-foreground"
                       }`}
-                      title={
-                        hasIncident
-                          ? "Doble click para editar esta incidencia"
-                          : "Doble click para agregar una incidencia"
-                      }
+                      title="Doble click para agregar otra incidencia"
                     >
-                      {hasIncident ? (
-                        <div className="flex w-full flex-col items-start gap-1.5 text-left">
-                          <span className="w-full font-bold uppercase leading-tight text-foreground">
-                            {incidentLabel || "Incidencia"}
-                          </span>
+                      {hasIncident && (
+                        <div className="flex w-full flex-col gap-1.5 not-italic">
+                          {incidents.map((incident) => (
+                            <div
+                              key={incident.id}
+                              className="group flex items-center gap-1 rounded-md border border-black/10 px-2 py-1 shadow-sm"
+                              style={{
+                                backgroundColor:
+                                  incident.color || "#BAE6FD",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                data-incident-action="edit"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onEditIncident(row, day, incident);
+                                }}
+                                className="flex min-w-0 flex-1 items-center gap-1 text-left font-bold uppercase leading-tight underline-offset-2 hover:underline"
+                                title="Editar esta incidencia"
+                              >
+                                <span className="truncate">
+                                  {incident.incidencia || "Incidencia"}
+                                </span>
+                              </button>
 
-                          {dateTimeLines.length > 0 && (
-                            <ul className="w-full list-disc space-y-1 pl-4 text-left font-normal text-foreground">
-                              {dateTimeLines.map((line, index) => (
-                                <li
-                                  key={`${line}-${index}`}
-                                  className="whitespace-normal leading-tight"
-                                >
-                                  {line}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
+                              <button
+                                type="button"
+                                data-incident-action="delete"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onDeleteIncident(incident.id);
+                                }}
+                                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                                title="Borrar esta incidencia"
+                                aria-label={`Borrar incidencia ${incident.incidencia}`}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ) : cleanValue ? (
+                      )}
+
+                      {cleanValue ? (
                         dateTimeLines.length > 0 ? (
-                          <ul className="w-full list-disc space-y-1 pl-4 text-left font-normal text-foreground">
-                            {dateTimeLines.map((line, index) => (
+                          <ul className="w-full list-disc space-y-1 pl-4 text-left font-normal not-italic text-foreground">
+                            {dateTimeLines.map((line, index) => {
+                            const [fecha, hora] = line.trim().split(/\s+/);
+                            return (
                               <li
                                 key={`${line}-${index}`}
                                 className="whitespace-normal leading-tight"
                               >
-                                {line}
+                                <span>{fecha} </span>
+
+                                <span className="font-bold text-blue-600">
+                                  {hora}
+                                </span>
                               </li>
-                            ))}
+                            );
+                          })}
                           </ul>
                         ) : (
-                          <span className="whitespace-pre-line text-left text-foreground">
+                          <span className="whitespace-pre-line text-left not-italic text-foreground">
                             {cleanValue}
                           </span>
                         )
-                      ) : (
-                        <span className="italic text-muted-foreground">
-                          Sin incidencia/s
-                        </span>
-                      )}
-                    </button>
+                      ) : !hasIncident ? (
+                        <span>Sin incidencia/s</span>
+                      ) : null}
 
-                    {incident && (
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteIncident(incident.id);
+                        data-incident-action="add"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onAddIncident(row, day);
                         }}
-                        className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                        title="Borrar incidencia"
-                        aria-label="Borrar incidencia"
+                        className="mt-auto inline-flex items-center justify-center gap-1 rounded px-1 py-1 text-[10px] font-semibold not-italic text-primary hover:bg-primary/10"
+                        title="Agregar otra incidencia a este día"
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Plus className="h-3 w-3" />
+                        {hasIncident
+                          ? "Agregar otra incidencia"
+                          : "Agregar incidencia"}
                       </button>
-                    )}
+                    </div>
                   </td>
                 );
               })}
@@ -1775,7 +2009,7 @@ function TablaPrenomina({
           {rows.length === 0 && (
             <tr>
               <td
-                colSpan={days.length + 3}
+                colSpan={days.length + 4}
                 className="border border-border px-5 py-10 text-center text-muted-foreground"
               >
                 {hasSelectedEmployee
@@ -1812,6 +2046,230 @@ function TablaPrenomina({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+function HexColorPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const normalizedValue = normalizeHexColor(value);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(normalizedValue);
+  const [hsv, setHsv] = useState<HsvColor>(() => hexToHsv(normalizedValue));
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const next = normalizeHexColor(value);
+    setDraft(next);
+    setHsv(hexToHsv(next));
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [open]);
+
+  const applyHsv = (next: HsvColor) => {
+    const bounded = {
+      h: Math.max(0, Math.min(359.999, next.h)),
+      s: Math.max(0, Math.min(1, next.s)),
+      v: Math.max(0, Math.min(1, next.v)),
+    };
+
+    const hex = hsvToHex(bounded);
+
+    setHsv(bounded);
+    setDraft(hex);
+    onChange(hex);
+  };
+
+  const updateSaturationValue = (
+    element: HTMLDivElement,
+    clientX: number,
+    clientY: number
+  ) => {
+    const rect = element.getBoundingClientRect();
+    const saturation = (clientX - rect.left) / rect.width;
+    const brightness = 1 - (clientY - rect.top) / rect.height;
+
+    applyHsv({
+      ...hsv,
+      s: saturation,
+      v: brightness,
+    });
+  };
+
+  const updateHue = (element: HTMLDivElement, clientX: number) => {
+    const rect = element.getBoundingClientRect();
+    const ratio = (clientX - rect.left) / rect.width;
+
+    applyHsv({
+      ...hsv,
+      h: ratio * 360,
+    });
+  };
+
+  const commitHex = () => {
+    if (!/^#[0-9A-F]{6}$/i.test(draft)) {
+      setDraft(normalizedValue);
+      return;
+    }
+
+    const next = draft.toUpperCase();
+
+    setDraft(next);
+    setHsv(hexToHsv(next));
+    onChange(next);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center justify-center rounded-md border border-input bg-background px-3 py-2"
+        aria-label="Seleccionar color"
+        aria-expanded={open}
+        title="Seleccionar color"
+      >
+        <span
+          className="h-7 w-9 shrink-0 rounded border border-border"
+          style={{ backgroundColor: normalizedValue }}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-2 w-64 rounded-lg border border-border bg-card p-3 shadow-xl">
+          <div
+            className="relative h-40 w-full cursor-crosshair overflow-hidden rounded-md"
+            style={{
+              backgroundColor: `hsl(${hsv.h} 100% 50%)`,
+              backgroundImage:
+                "linear-gradient(to top, #000000, transparent), linear-gradient(to right, #FFFFFF, transparent)",
+            }}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              updateSaturationValue(
+                event.currentTarget,
+                event.clientX,
+                event.clientY
+              );
+            }}
+            onPointerMove={(event) => {
+              if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+                return;
+              }
+
+              updateSaturationValue(
+                event.currentTarget,
+                event.clientX,
+                event.clientY
+              );
+            }}
+          >
+            <span
+              className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
+              style={{
+                left: `${hsv.s * 100}%`,
+                top: `${(1 - hsv.v) * 100}%`,
+              }}
+            />
+          </div>
+
+          <div
+            className="relative mt-3 h-4 w-full cursor-pointer rounded-full"
+            style={{
+              background:
+                "linear-gradient(to right, #FF0000, #FFFF00, #00FF00, #00FFFF, #0000FF, #FF00FF, #FF0000)",
+            }}
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              updateHue(event.currentTarget, event.clientX);
+            }}
+            onPointerMove={(event) => {
+              if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+                return;
+              }
+
+              updateHue(event.currentTarget, event.clientX);
+            }}
+          >
+            <span
+              className="pointer-events-none absolute top-1/2 h-5 w-2 -translate-x-1/2 -translate-y-1/2 rounded border-2 border-white shadow"
+              style={{ left: `${(hsv.h / 360) * 100}%` }}
+            />
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <span
+              className="h-9 w-9 shrink-0 rounded-md border border-border"
+              style={{ backgroundColor: normalizedValue }}
+              aria-hidden="true"
+            />
+
+            <input
+              type="text"
+              value={draft}
+              maxLength={7}
+              spellCheck={false}
+              onChange={(event) => {
+                let next = event.target.value.toUpperCase();
+
+                if (next && !next.startsWith("#")) {
+                  next = `#${next}`;
+                }
+
+                next = next
+                  .replace(/[^#0-9A-F]/g, "")
+                  .replace(/(?!^)#/g, "")
+                  .slice(0, 7);
+
+                setDraft(next);
+
+                if (/^#[0-9A-F]{6}$/.test(next)) {
+                  setHsv(hexToHsv(next));
+                  onChange(next);
+                }
+              }}
+              onBlur={commitHex}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+              placeholder="#BAE6FD"
+              pattern="^#[0-9A-Fa-f]{6}$"
+              className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm font-semibold uppercase outline-none focus:ring-2 focus:ring-primary"
+              aria-label="Color hexadecimal"
+            />
+
+            <span className="text-xs font-bold text-muted-foreground">
+              HEX
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1893,7 +2351,6 @@ function SpanishDatePicker({
                 }).format(date),
             }}
           />
-      
         </PopoverContent>
       </Popover>
     </div>

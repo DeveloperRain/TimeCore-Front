@@ -136,13 +136,13 @@ function RelojesPage() {
       if (!document.hidden && !deviceOperationInProgress) {
         actualizarEstadosRelojes();
       }
-    }, 300);
+    }, 100);
 
     const interval = window.setInterval(() => {
       if (!document.hidden && !deviceOperationInProgress) {
         actualizarEstadosRelojes();
       }
-    }, 5000);
+    }, 1000);
 
     return () => {
       window.clearTimeout(initialTimer);
@@ -576,10 +576,7 @@ function RelojesPage() {
           time: getCurrentTime(),
           message: ip ? `Conectando '${ip}'` : "Conectando al reloj",
         },
-        {
-          time: getCurrentTime(),
-          message: "Fecha y hora verificadas",
-        },
+        
         {
           time: getCurrentTime(),
           message: "Descargando",
@@ -757,24 +754,6 @@ function RelojesPage() {
         </div>
       )}
 
-      <div className="mb-4 flex justify-start">
-        <button
-          type="button"
-          disabled={
-            syncingAll ||
-            syncingId !== null ||
-            relojes.filter((reloj) => reloj.activo).length === 0
-          }
-          onClick={sincronizarTodosLosRelojes}
-          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${syncingAll ? "animate-spin" : ""}`}
-          />
-          {syncingAll ? "Sincronizando Todo..." : "Sincronizar Todo"}
-        </button>
-      </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <StatCard
           label="Total de relojes"
@@ -814,13 +793,31 @@ function RelojesPage() {
             </p>
           </div>
 
-          <button
-            onClick={openAdd}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
-          >
-            <Plus className="h-4 w-4" />
-            Agregar reloj
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={
+                syncingAll ||
+                syncingId !== null ||
+                relojes.filter((reloj) => reloj.activo).length === 0
+              }
+              onClick={sincronizarTodosLosRelojes}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${syncingAll ? "animate-spin" : ""}`}
+              />
+              {syncingAll ? "Sincronizando Todo..." : "Sincronizar Todo"}
+            </button>
+
+            <button
+              onClick={openAdd}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
+            >
+              <Plus className="h-4 w-4" />
+              Agregar reloj
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

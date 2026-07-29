@@ -771,13 +771,13 @@ function EmpleadosPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/60 text-muted-foreground text-xs uppercase tracking-wider">
               <tr>
+                <th className="text-left font-semibold px-5 py-3">Empresa</th>
+                <th className="text-left font-semibold px-5 py-3">Sucursal</th>
                 <th className="text-left font-semibold px-5 py-3">Área</th>
                 <th className="text-left font-semibold px-5 py-3">Empleado</th>
                 <th className="text-left font-semibold px-5 py-3">Puesto</th>
-                <th className="text-left font-semibold px-5 py-3">Sucursal</th>
                 <th className="text-left font-semibold px-5 py-3">Email</th>
                 <th className="text-left font-semibold px-5 py-3">Estado</th>
-                <th className="text-left font-semibold px-5 py-3">Empresa</th>
                 <th className="text-right font-semibold px-5 py-3">Editar</th>
               </tr>
             </thead>
@@ -788,6 +788,13 @@ function EmpleadosPage() {
                   key={`${e.id}-${e.uid}-${e.empresa}`}
                   className="hover:bg-muted/40 transition-colors"
                 >
+                  
+                  <td className="px-5 py-3 text-muted-foreground">
+                    {e.empresa || ""}
+                  </td>
+
+                  <td className="px-5 py-3 text-foreground">{e.sucursal}</td>
+
                   <td className="px-5 py-3 text-foreground">
                     {e.area || ""}
                   </td>
@@ -797,8 +804,6 @@ function EmpleadosPage() {
                   </td>
 
                   <td className="px-5 py-3 text-foreground">{e.puesto}</td>
-
-                  <td className="px-5 py-3 text-foreground">{e.sucursal}</td>
 
                   <td className="px-5 py-3 text-muted-foreground">{e.email}</td>
 
@@ -824,11 +829,6 @@ function EmpleadosPage() {
                       />
                       {e.estado}
                     </span>
-                  </td>
-
-
-                  <td className="px-5 py-3 text-muted-foreground">
-                    {e.empresa || ""}
                   </td>
 
                   <td className="px-5 py-3">
@@ -1081,9 +1081,6 @@ function EmpleadosPage() {
                 <h3 className="text-lg font-semibold text-foreground">
                   Crear en otro reloj
                 </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Se creará una asignación independiente de {editing.nombre}.
-                </p>
               </div>
 
               <button
@@ -1109,7 +1106,7 @@ function EmpleadosPage() {
 
             <div className="space-y-4 p-5">
               <div className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-                La asignación original en <strong>{editing.sucursal}</strong> / {editing.empresa || "sin empresa"} no se modificará. Sus asistencias históricas permanecerán ligadas al reloj de origen.
+                El empleado original en <strong>{editing.sucursal}</strong> / {editing.empresa || "sin empresa"} no se modificará. Sus asistencias históricas permanecerán en el reloj de origen.
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1180,10 +1177,6 @@ function EmpleadosPage() {
                   placeholder="Se asigna según el reloj"
                 />
               </div>
-
-              <p className="text-xs text-muted-foreground">
-                Se copiarán el nombre, rol, área y correo actualmente guardados. Los cambios posteriores serán independientes en cada sucursal y reloj.
-              </p>
 
               <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
                 <button
