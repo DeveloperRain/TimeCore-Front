@@ -1587,8 +1587,8 @@ function TablaAsistencias({
         <thead className="bg-muted/60 text-muted-foreground text-xs uppercase tracking-wider">
           <tr>
             <th className="text-left font-semibold px-5 py-3">Empresa</th>
-            <th className="text-left font-semibold px-5 py-3">Área</th>
             <th className="text-left font-semibold px-5 py-3">Sucursal</th>
+            <th className="text-left font-semibold px-5 py-3">Área</th>
             <th className="text-left font-semibold px-5 py-3">Empleado</th>
             <th className="text-left font-semibold px-5 py-3">Fecha</th>
             <th className="text-left font-semibold px-5 py-3">Entrada</th>
@@ -1602,9 +1602,9 @@ function TablaAsistencias({
 
               <td className="px-5 py-3 text-muted-foreground">{a.empresa}</td>
 
-              <td className="px-5 py-3 text-foreground">{a.area}</td>
-
               <td className="px-5 py-3 text-foreground">{a.sucursal}</td>
+
+              <td className="px-5 py-3 text-foreground">{a.area}</td>
               
               <td className="px-5 py-3 font-medium text-foreground">
                 {a.trabajador}
@@ -1812,11 +1812,11 @@ function TablaPrenomina({
             <th className="border border-border px-3 py-2 text-left font-semibold">
               Empresa
             </th>
-            <th className="border border-border px-3 py-2 text-left font-semibold">
-              Área
+             <th className="border border-border px-3 py-2 text-left font-semibold">
+              Sucursal
             </th>
             <th className="border border-border px-3 py-2 text-left font-semibold">
-              Sucursal
+              Área
             </th>
             <th className="border border-border px-3 py-2 text-left font-semibold">
               Trabajador
@@ -1849,10 +1849,10 @@ function TablaPrenomina({
                 {sameAsPrev ? "" : row.empresa}
               </td>
               <td className="border border-border px-3 py-2">
-                {sameAsPrev ? "" : row.area}
+                {sameAsPrev ? "" : row.sucursal}
               </td>
               <td className="border border-border px-3 py-2">
-                {sameAsPrev ? "" : row.sucursal}
+                {sameAsPrev ? "" : row.area}
               </td>
               <td className="border border-border px-3 py-2 font-medium">
                 {sameAsPrev ? "" : row.trabajador}
