@@ -18,6 +18,8 @@ type SyncLogRow = {
 type SyncLogEventDetail = {
   title?: string;
   rows?: SyncLogRow[];
+  mode?: "replace" | "append";
+  instant?: boolean;
 };
 
 function getCurrentTime() {
@@ -99,6 +101,7 @@ export function AppShell({
   });
   const [isDraggingSyncLog, setIsDraggingSyncLog] = useState(false);
   const syncLogDragOffsetRef = useRef<NoticePosition>({ x: 0, y: 0 });
+  const syncLogSequenceRef = useRef(0);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -167,7 +170,7 @@ export function AppShell({
     e.stopPropagation();
 
     const confirmar = window.confirm(
-      "Esta Accion puede tomar tiempo. ¿Deseas continuar?"
+      "Esta acción puede tomar tiempo. ¿Deseas continuar?"
     );
 
     if (!confirmar) return;
@@ -178,26 +181,89 @@ export function AppShell({
       .sincronizarTodosLosRelojes()
       .then((res) => {
         const data = res.data ?? {};
-        const syncedDevices = data.synced_devices ?? 0;
-        const failedDevices = data.failed_devices ?? 0;
+        const syncedDevices = Number(data.synced_devices ?? 0);
+        const failedDevices = Number(data.failed_devices ?? 0);
+
+        const failedList = Array.isArray(data.failed)
+          ? data.failed
+          : Array.isArray(data.failed_devices_list)
+            ? data.failed_devices_list
+            : [];
+
+        const failedRows: SyncLogRow[] = failedList.map(
+          (device: any) => {
+            const deviceName = String(
+              device.device_name ??
+                device.name ??
+                device.device ??
+                "Reloj sin nombre"
+            );
+
+            const deviceIp = String(
+              device.ip ?? device.device_ip ?? ""
+            ).trim();
+
+            const reason = String(
+              device.error ??
+                device.message ??
+                device.reason ??
+                ""
+            ).trim();
+
+            const deviceLabel = deviceIp
+              ? `${deviceName} (${deviceIp})`
+              : deviceName;
+
+            return {
+              time: getCurrentTime(),
+              message: reason
+                ? `No sincronizado: ${deviceLabel} — ${reason}`
+                : `No sincronizado: ${deviceLabel}`,
+            };
+          }
+        );
+
+        const rows: SyncLogRow[] = [
+          {
+            time: getCurrentTime(),
+            message: `Relojes sincronizados: ${syncedDevices}`,
+          },
+          {
+            time: getCurrentTime(),
+            message: `Relojes no sincronizados: ${failedDevices}`,
+          },
+          ...failedRows,
+        ];
+
+        if (failedDevices > 0 && failedRows.length === 0) {
+          rows.push({
+            time: getCurrentTime(),
+            message:
+              "No fue posible obtener el nombre de los relojes que fallaron.",
+          });
+        }
 
         showSyncLogMessages({
-          title: "Sincronización realizada con éxito",
-          rows: [
-            {
-              time: getCurrentTime(),
-              message: `Relojes sincronizados: ${syncedDevices}`,
-            },
-            {
-              time: getCurrentTime(),
-              message: `Relojes no sincronizados: ${failedDevices}`,
-            },
-          ],
+          title:
+            failedDevices > 0
+              ? "Sincronización finalizada con errores"
+              : "Sincronización realizada con éxito",
+          rows,
         });
       })
       .catch((err) => {
         console.error("Error sincronizando todos los relojes:", err);
-        window.alert("No se pudieron sincronizar los relojes.");
+
+        showSyncLogMessages({
+          title: "Error de sincronización",
+          rows: [
+            {
+              time: getCurrentTime(),
+              message:
+                "No se pudo completar la sincronización de los relojes.",
+            },
+          ],
+        });
       })
       .finally(() => {
         setSyncingAllDevices(false);
@@ -206,15 +272,49 @@ export function AppShell({
 
   function showSyncLogMessages(detail: SyncLogEventDetail) {
     const rows = detail.rows ?? [];
+    const mode = detail.mode ?? "replace";
+    const instant = detail.instant ?? false;
+
+    if (detail.title) {
+      setSyncLogTitle(detail.title);
+    }
+
+    setShowSyncLog(true);
+
+    if (mode === "append") {
+      if (rows.length === 0) return;
+
+      if (instant) {
+        setSyncLogRows((currentRows) => [...currentRows, ...rows]);
+        return;
+      }
+
+      const sequence = syncLogSequenceRef.current;
+
+      rows.forEach((row, index) => {
+        window.setTimeout(() => {
+          if (sequence !== syncLogSequenceRef.current) return;
+          setSyncLogRows((currentRows) => [...currentRows, row]);
+        }, index * 250);
+      });
+
+      return;
+    }
+
+    syncLogSequenceRef.current += 1;
+    const sequence = syncLogSequenceRef.current;
+    setSyncLogRows([]);
 
     if (rows.length === 0) return;
 
-    setSyncLogTitle(detail.title ?? "Sincronización realizada con éxito");
-    setSyncLogRows([]);
-    setShowSyncLog(true);
+    if (instant) {
+      setSyncLogRows(rows);
+      return;
+    }
 
     rows.forEach((row, index) => {
       window.setTimeout(() => {
+        if (sequence !== syncLogSequenceRef.current) return;
         setSyncLogRows((currentRows) => [...currentRows, row]);
       }, index * 650);
     });

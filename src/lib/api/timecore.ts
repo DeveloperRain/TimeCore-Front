@@ -1,3 +1,5 @@
+import { ApiError, type ApiErrorPayload } from "@/lib/api/errors";
+
 const API_URL = "http://127.0.0.1:8000";
 
 type LoginResponse = {
@@ -37,22 +39,56 @@ function branchQuery(params?: BranchScopedParams) {
 
 async function request(endpoint: string, options?: RequestInit) {
   const token = localStorage.getItem("timecore-token");
+  let response: Response;
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Error ${response.status}: ${errorText}`);
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options?.headers,
+      },
+    });
+  } catch (error) {
+    throw new ApiError({
+      message: "No se pudo conectar con TimeCore API.",
+      status: 0,
+      code: "NETWORK_ERROR",
+      details: error instanceof Error ? error.message : error,
+    });
   }
 
-  return response.json();
+  const rawText = await response.text();
+  let payload: any = null;
+
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText);
+    } catch {
+      payload = rawText;
+    }
+  }
+
+  if (!response.ok) {
+    const errorPayload =
+      payload && typeof payload === "object"
+        ? (payload as ApiErrorPayload)
+        : undefined;
+
+    throw new ApiError({
+      message:
+        errorPayload?.message ??
+        errorPayload?.error?.message ??
+        `La solicitud falló con estado ${response.status}.`,
+      status: response.status,
+      code: errorPayload?.error?.code ?? `HTTP_${response.status}`,
+      details: errorPayload?.error?.details ?? payload,
+      requestId: errorPayload?.request_id,
+    });
+  }
+
+  return payload;
 }
 
 export const authStorage = {
@@ -342,10 +378,18 @@ export const timecoreApi = {
   // SINCRONIZACIÓN
   // =========================
 
-  sincronizarDevice: (id: number) =>
-    request(`/sync/device/${id}`, {
-      method: "POST",
-    }),
+  sincronizarDevice: (
+    id: number,
+    params?: { failFast?: boolean }
+  ) =>
+    request(
+      `/sync/device/${id}${buildQuery({
+        fail_fast: params?.failFast ? true : undefined,
+      })}`,
+      {
+        method: "POST",
+      }
+    ),
 
   sincronizarTodosLosRelojes: () =>
     request("/sync/devices/all", {

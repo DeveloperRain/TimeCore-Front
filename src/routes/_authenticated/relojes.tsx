@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { timecoreApi } from "@/lib/api/timecore";
 import {
   Plug,
@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 
-import { getErrorMessage } from "@/lib/api/errors";
+import { ApiError, getErrorMessage } from "@/lib/api/errors";
 type RelojFront = {
   id: number;
   nombre: string;
@@ -34,6 +34,8 @@ type RelojFront = {
   desfaseSegundos?: number;
   horaCorrecta?: boolean;
   horaRevisada?: boolean;
+  syncInProgress?: boolean;
+  syncCancelled?: boolean;
 };
 
 type SucursalFront = {
@@ -51,14 +53,52 @@ const getCurrentTime = () =>
     hour12: false,
   });
 
-const showSyncLog = (rows: { time: string; message: string }[]) => {
+const DISCONNECTED_UI_HOLD_MS = 7000;
+
+type SyncLogRow = {
+  time: string;
+  message: string;
+};
+
+type SyncLogOptions = {
+  title?: string;
+  mode?: "replace" | "append";
+  instant?: boolean;
+};
+
+const showSyncLog = (
+  rows: SyncLogRow[],
+  options: SyncLogOptions = {}
+) => {
+  const mode = options.mode ?? "replace";
+
   window.dispatchEvent(
     new CustomEvent("timecore:sync-log", {
       detail: {
-        title: "Sincronización realizada con éxito",
+        title:
+          options.title ??
+          (mode === "replace"
+            ? "Sincronización realizada con éxito"
+            : undefined),
         rows,
+        mode,
+        instant: options.instant ?? false,
       },
     })
+  );
+};
+
+const appendSyncLog = (
+  message: string,
+  title?: string
+) => {
+  showSyncLog(
+    [{ time: getCurrentTime(), message }],
+    {
+      title,
+      mode: "append",
+      instant: true,
+    }
   );
 };
 
@@ -106,6 +146,9 @@ function RelojesPage() {
   const [checkingTimeId, setCheckingTimeId] = useState<number | null>(null);
   const [syncingTimeId, setSyncingTimeId] = useState<number | null>(null);
   const [editing, setEditing] = useState<RelojFront | null>(null);
+  const statusRequestInFlightRef = useRef(false);
+  const statusGenerationRef = useRef(0);
+  const disconnectedHoldUntilRef = useRef<Map<number, number>>(new Map());
 
   const [form, setForm] = useState({
     nombre: "",
@@ -126,29 +169,20 @@ function RelojesPage() {
   }, [branchId]);
 
   useEffect(() => {
-    const deviceOperationInProgress =
-      syncingAll ||
-      syncingId !== null ||
-      checkingTimeId !== null ||
-      syncingTimeId !== null;
-
-    const initialTimer = window.setTimeout(() => {
-      if (!document.hidden && !deviceOperationInProgress) {
-        actualizarEstadosRelojes();
+    const runStatusCheck = () => {
+      if (!document.hidden) {
+        void actualizarEstadosRelojes();
       }
-    }, 100);
+    };
 
-    const interval = window.setInterval(() => {
-      if (!document.hidden && !deviceOperationInProgress) {
-        actualizarEstadosRelojes();
-      }
-    }, 1000);
+    const initialTimer = window.setTimeout(runStatusCheck, 100);
+    const interval = window.setInterval(runStatusCheck, 1000);
 
     return () => {
       window.clearTimeout(initialTimer);
       window.clearInterval(interval);
     };
-  }, [branchId, syncingAll, syncingId, checkingTimeId, syncingTimeId]);
+  }, [branchId]);
 
   const normalizarEstadoReloj = (r: any): RelojFront["estado"] => {
     if (!Boolean(r.activo ?? r.is_active ?? true)) {
@@ -207,7 +241,44 @@ function RelojesPage() {
         : undefined,
     horaRevisada:
       r.in_sync !== undefined && r.in_sync !== null,
+    syncInProgress: Boolean(r.sync_in_progress ?? false),
+    syncCancelled: Boolean(r.sync_cancelled ?? false),
   });
+
+  const protegerEstadoDesconectado = (
+    incoming: RelojFront,
+    current?: RelojFront
+  ): RelojFront => {
+    const holdUntil = disconnectedHoldUntilRef.current.get(incoming.id) ?? 0;
+
+    if (holdUntil > Date.now() && incoming.estado === "Conectado") {
+      return {
+        ...incoming,
+        estado: "Desconectado",
+        syncInProgress: false,
+        syncCancelled: true,
+      };
+    }
+
+    if (holdUntil <= Date.now()) {
+      disconnectedHoldUntilRef.current.delete(incoming.id);
+    }
+
+    if (incoming.estado === "Desconectado" && current?.syncCancelled) {
+      return {
+        ...incoming,
+        syncInProgress: false,
+        syncCancelled: true,
+      };
+    }
+
+    return incoming;
+  };
+
+  const confirmarRelojConectado = (id: number) => {
+    disconnectedHoldUntilRef.current.delete(id);
+    statusGenerationRef.current += 1;
+  };
 
   const cargarSucursales = () => {
     return timecoreApi
@@ -244,44 +315,74 @@ function RelojesPage() {
   };
 
   const cargarRelojes = () => {
+    const requestGeneration = statusGenerationRef.current;
     setLoading(true);
 
-    timecoreApi
+    return timecoreApi
       .getDevices(branchParams)
       .then((res) => {
-        const data = Array.isArray(res) ? res : res?.data ?? [];
+        if (requestGeneration !== statusGenerationRef.current) {
+          return;
+        }
 
+        const data = Array.isArray(res) ? res : res?.data ?? [];
         const relojesApi: RelojFront[] = data.map(mapRelojApi);
 
-        setRelojes(relojesApi);
+        setRelojes((actuales) => {
+          const currentById = new Map(actuales.map((item) => [item.id, item]));
+          return relojesApi.map((incoming) =>
+            protegerEstadoDesconectado(incoming, currentById.get(incoming.id))
+          );
+        });
       })
       .catch((err) => {
         console.error("Error cargando relojes:", err);
-        setRelojes([]);
+        if (requestGeneration === statusGenerationRef.current) {
+          setRelojes([]);
+        }
       })
       .finally(() => {
         setLoading(false);
       });
   };
 
-  const actualizarEstadosRelojes = () => {
-    timecoreApi
-      .verificarEstadoRelojes(branchParams)
-      .then((res) => {
-        const data = Array.isArray(res) ? res : res?.data ?? [];
-        const estados = new Map<number, RelojFront>(
-          data.map((r: any) => [Number(r.id), mapRelojApi(r)])
-        );
+  const actualizarEstadosRelojes = async () => {
+    if (statusRequestInFlightRef.current) return;
 
-        setRelojes((actuales) =>
-          actuales.length === 0
-            ? data.map(mapRelojApi)
-            : actuales.map((reloj) => estados.get(reloj.id) ?? reloj)
-        );
-      })
-      .catch((err) => {
-        console.error("Error verificando estado de relojes:", err);
-      });
+    const requestGeneration = statusGenerationRef.current;
+    statusRequestInFlightRef.current = true;
+
+    try {
+      const res = await timecoreApi.verificarEstadoRelojes(branchParams);
+
+      // Si durante esta petición el watchdog reportó una desconexión, la
+      // respuesta ya es vieja y no debe poder revivir el estado Conectado.
+      if (requestGeneration !== statusGenerationRef.current) {
+        return;
+      }
+
+      const data = Array.isArray(res) ? res : res?.data ?? [];
+      const estados = new Map<number, RelojFront>(
+        data.map((r: any) => [Number(r.id), mapRelojApi(r)])
+      );
+
+      setRelojes((actuales) =>
+        actuales.length === 0
+          ? data.map(mapRelojApi).map((incoming: RelojFront) =>
+              protegerEstadoDesconectado(incoming)
+            )
+          : actuales.map((reloj) => {
+              const incoming = estados.get(reloj.id);
+              return incoming
+                ? protegerEstadoDesconectado(incoming, reloj)
+                : reloj;
+            })
+      );
+    } catch (err) {
+      console.error("Error verificando estado de relojes:", err);
+    } finally {
+      statusRequestInFlightRef.current = false;
+    }
   };
 
   const actualizarHoraEnReloj = (id: number, data: any) => {
@@ -409,6 +510,10 @@ function RelojesPage() {
     } catch (err) {
       console.error("Error verificando la hora del reloj:", err);
 
+      if (esErrorDeDesconexion(err)) {
+        marcarRelojDesconectado(id);
+      }
+
       if (mostrarMensaje) {
         window.alert(
           getErrorMessage(
@@ -531,7 +636,38 @@ function RelojesPage() {
       });
   };
 
+  const esErrorDeDesconexion = (error: unknown) =>
+    error instanceof ApiError &&
+    [
+      "DEVICE_DISCONNECTED_DURING_SYNC",
+      "DEVICE_UNAVAILABLE",
+      "DEVICE_TIMEOUT",
+      "ZK_COMMUNICATION_ERROR",
+    ].includes(error.code);
+
+  const marcarRelojDesconectado = (id: number) => {
+    statusGenerationRef.current += 1;
+    disconnectedHoldUntilRef.current.set(
+      id,
+      Date.now() + DISCONNECTED_UI_HOLD_MS
+    );
+
+    setRelojes((actuales) =>
+      actuales.map((reloj) =>
+        reloj.id === id
+          ? {
+              ...reloj,
+              estado: "Desconectado",
+              syncInProgress: false,
+              syncCancelled: true,
+            }
+          : reloj
+      )
+    );
+  };
+
   const sincronizarReloj = async (id: number) => {
+    let desconexionDetectada = false;
     setSyncingId(id);
 
     try {
@@ -567,6 +703,8 @@ function RelojesPage() {
       const downloadedEvents =
         data.attendance_synced ?? data.events_downloaded ?? 0;
 
+      confirmarRelojConectado(id);
+
       if (data.clock_status) {
         actualizarHoraEnReloj(id, data.clock_status);
       }
@@ -594,11 +732,23 @@ function RelojesPage() {
       cargarRelojes();
     } catch (err) {
       console.error("Error sincronizando reloj:", err);
-      window.alert(
-        getErrorMessage(err, "No se pudo sincronizar el reloj")
-      );
+
+      if (esErrorDeDesconexion(err)) {
+        desconexionDetectada = true;
+        marcarRelojDesconectado(id);
+      }
+
+      window.alert(getErrorMessage(err, "No se pudo sincronizar el reloj"));
     } finally {
       setSyncingId(null);
+
+      if (!desconexionDetectada) {
+        await actualizarEstadosRelojes();
+      } else {
+        window.setTimeout(() => {
+          void actualizarEstadosRelojes();
+        }, 2000);
+      }
     }
   };
 
@@ -614,12 +764,19 @@ function RelojesPage() {
 
     setSyncingAll(true);
 
-    const logRows: { time: string; message: string }[] = [
+    showSyncLog(
+      [
+        {
+          time: getCurrentTime(),
+          message: `Iniciando sincronización de ${relojesActivos.length} reloj(es)`,
+        },
+      ],
       {
-        time: getCurrentTime(),
-        message: `Iniciando sincronización de ${relojesActivos.length} reloj(es)`,
-      },
-    ];
+        title: "Sincronización en proceso",
+        mode: "replace",
+        instant: true,
+      }
+    );
 
     let sincronizados = 0;
     let fallidos = 0;
@@ -627,17 +784,16 @@ function RelojesPage() {
 
     try {
       /*
-       * Se sincronizan uno por uno para no abrir conexiones simultáneas
-       * innecesarias con los dispositivos biométricos.
+       * Se sincronizan uno por uno. Cada paso se agrega en tiempo real a la
+       * tabla de resultados y un fallo individual no detiene los demás.
        */
       for (const reloj of relojesActivos) {
-        logRows.push({
-          time: getCurrentTime(),
-          message: `Conectando '${reloj.ip}'`,
-        });
+        appendSyncLog(`Conectando '${reloj.ip}'`);
 
         try {
-          const res = await timecoreApi.sincronizarDevice(reloj.id);
+          const res = await timecoreApi.sincronizarDevice(reloj.id, {
+            failFast: true,
+          });
           const data = res?.data ?? {};
 
           const descargados = Number(
@@ -651,46 +807,49 @@ function RelojesPage() {
             ? descargados
             : 0;
           sincronizados += 1;
+          confirmarRelojConectado(reloj.id);
 
           if (data.clock_status) {
             actualizarHoraEnReloj(reloj.id, data.clock_status);
           }
 
-          logRows.push({
-            time: getCurrentTime(),
-            message: `${reloj.nombre}: sincronizado correctamente`,
-          });
+          appendSyncLog(`${reloj.nombre}: sincronizado correctamente`);
         } catch (err) {
           fallidos += 1;
           console.error(`Error sincronizando ${reloj.nombre}:`, err);
 
-          logRows.push({
-            time: getCurrentTime(),
-            message: `${reloj.nombre}: no se pudo sincronizar`,
-          });
+          const desconectado = esErrorDeDesconexion(err);
+
+          if (desconectado) {
+            marcarRelojDesconectado(reloj.id);
+          }
+
+          appendSyncLog(
+            desconectado
+              ? `Conexión fallida`
+              : `Sincronización fallida con ${reloj.nombre} (${reloj.ip}): no se pudo completar la operación`
+          );
         }
       }
 
-      logRows.push({
-        time: getCurrentTime(),
-        message: `Resultado: ${sincronizados} sincronizado(s), ${fallidos} con error`,
-      });
+      appendSyncLog(
+        `${sincronizados} sincronizado(s), ${fallidos} con error`
+      );
+      appendSyncLog(
+        `Se descargaron ${eventosDescargados} eventos nuevos`,
+        fallidos > 0
+          ? "Sincronización finalizada con errores"
+          : "Sincronización realizada con éxito"
+      );
 
-      logRows.push({
-        time: getCurrentTime(),
-        message: `Se descargaron ${eventosDescargados} eventos nuevos`,
-      });
-
-      showSyncLog(logRows);
-
-      cargarRelojes();
-      actualizarEstadosRelojes();
-
-      if (fallidos > 0) {
-        window.alert(
-          `La sincronización terminó con ${fallidos} reloj(es) sin completar. Revisa el resumen de sincronización.`
-        );
-      }
+      await cargarRelojes();
+      await actualizarEstadosRelojes();
+    } catch (err) {
+      console.error("Error general sincronizando relojes:", err);
+      appendSyncLog(
+        "La sincronización general no pudo continuar por un error del servidor.",
+        "Sincronización finalizada con errores"
+      );
     } finally {
       setSyncingAll(false);
     }
