@@ -1,6 +1,8 @@
 import { ApiError, type ApiErrorPayload } from "@/lib/api/errors";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+).replace(/\/+$/, "");
 
 type LoginResponse = {
   access_token: string;
@@ -17,7 +19,9 @@ type BranchScopedParams = {
   branchId?: number | string | null;
 };
 
-function buildQuery(params?: Record<string, string | number | boolean | null | undefined>) {
+function buildQuery(
+  params?: Record<string, string | number | boolean | null | undefined>
+) {
   const searchParams = new URLSearchParams();
 
   Object.entries(params ?? {}).forEach(([key, value]) => {
@@ -182,13 +186,15 @@ export const timecoreApi = {
     search?: string;
     status?: string;
   }) =>
-    request(`/db/users/paginated${buildQuery({
-      page: params?.page ?? 1,
-      limit: params?.limit ?? 50,
-      branch_id: params?.branchId ?? undefined,
-      search: params?.search ?? undefined,
-      status: params?.status ?? undefined,
-    })}`),
+    request(
+      `/db/users/paginated${buildQuery({
+        page: params?.page ?? 1,
+        limit: params?.limit ?? 50,
+        branch_id: params?.branchId ?? undefined,
+        search: params?.search ?? undefined,
+        status: params?.status ?? undefined,
+      })}`
+    ),
 
   getAsistencias: (params?: BranchScopedParams) =>
     request(`/db/attendance${branchQuery(params)}`),
@@ -201,14 +207,18 @@ export const timecoreApi = {
     branchId?: number | string | null;
     userIds?: string[];
   }) =>
-    request(`/db/attendance/paginated${buildQuery({
-      page: params?.page ?? 1,
-      limit: params?.limit ?? 50,
-      start_date: params?.startDate ?? undefined,
-      end_date: params?.endDate ?? undefined,
-      branch_id: params?.branchId ?? undefined,
-      user_ids: params?.userIds?.length ? params.userIds.join(",") : undefined,
-    })}`),
+    request(
+      `/db/attendance/paginated${buildQuery({
+        page: params?.page ?? 1,
+        limit: params?.limit ?? 50,
+        start_date: params?.startDate ?? undefined,
+        end_date: params?.endDate ?? undefined,
+        branch_id: params?.branchId ?? undefined,
+        user_ids: params?.userIds?.length
+          ? params.userIds.join(",")
+          : undefined,
+      })}`
+    ),
 
   getFechasAsistencia: (params?: BranchScopedParams) =>
     request(`/db/attendance/dates${branchQuery(params)}`),
@@ -378,10 +388,7 @@ export const timecoreApi = {
   // SINCRONIZACIÓN
   // =========================
 
-  sincronizarDevice: (
-    id: number,
-    params?: { failFast?: boolean }
-  ) =>
+  sincronizarDevice: (id: number, params?: { failFast?: boolean }) =>
     request(
       `/sync/device/${id}${buildQuery({
         fail_fast: params?.failFast ? true : undefined,
@@ -446,13 +453,16 @@ export const timecoreApi = {
       branchId?: number | string | null;
     }
   ) =>
-    request(`/users/${buildQuery({
-      device_id: params.deviceId,
-      branch_id: params.branchId ?? undefined,
-    })}`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+    request(
+      `/users/${buildQuery({
+        device_id: params.deviceId,
+        branch_id: params.branchId ?? undefined,
+      })}`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    ),
 
   actualizarUsuarioPorId: (
     id: number,

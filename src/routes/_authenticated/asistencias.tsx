@@ -17,6 +17,16 @@ import {
 
 import { getErrorMessage } from "@/lib/api/errors";
 export const Route = createFileRoute("/_authenticated/asistencias")({
+  validateSearch: (search: Record<string, unknown>) => {
+    const rawBranchId = search.branch_id;
+
+    return {
+      branch_id:
+        rawBranchId !== undefined && rawBranchId !== null && rawBranchId !== ""
+          ? Number(rawBranchId)
+          : undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Asistencias — TimeCore" },
@@ -521,6 +531,9 @@ function getDefaultIncidenciaForm(): IncidenciaForm {
 }
 
 function AsistenciasPage() {
+  const search = Route.useSearch();
+  const branchId = search.branch_id;
+
   const [vista, setVista] = useState<VistaTabla>(() => {
     if (typeof window === "undefined") return "asistencias";
 
@@ -569,11 +582,11 @@ function AsistenciasPage() {
 
   useEffect(() => {
     cargarTodo();
-  }, [fechaInicio, fechaFin, attendancePage]);
+  }, [fechaInicio, fechaFin, attendancePage, branchId]);
 
   useEffect(() => {
     setAttendancePage(1);
-  }, [fechaInicio, fechaFin]);
+  }, [fechaInicio, fechaFin, branchId]);
 
   useEffect(() => {
     setPrenominaPage(1);
@@ -587,7 +600,7 @@ function AsistenciasPage() {
     if (vista === "prenomina") {
       cargarPrenomina();
     }
-  }, [vista, fechaInicio, fechaFin]);
+  }, [vista, fechaInicio, fechaFin, branchId]);
 
   useEffect(() => {
     const target = pendingScrollIncidentRef.current;
@@ -754,7 +767,7 @@ function AsistenciasPage() {
     setLoading(true);
 
     timecoreApi
-      .getUsuarios()
+      .getUsuarios({ branchId })
       .then((resUsuarios) => {
         const listaUsuarios = Array.isArray(resUsuarios)
           ? resUsuarios
@@ -791,6 +804,7 @@ function AsistenciasPage() {
             limit: ATTENDANCE_PAGE_SIZE,
             startDate: fechaInicio || undefined,
             endDate: fechaFin || undefined,
+            branchId,
           })
           .then((resAsistencias) => {
           const payload = resAsistencias.data ?? {};
@@ -891,7 +905,7 @@ function AsistenciasPage() {
     // el backend recibe un user_id que no coincide exactamente con el código
     // visible del empleado.
     return timecoreApi
-      .getPrenomina(fechaInicio, fechaFin)
+      .getPrenomina(fechaInicio, fechaFin, { branchId })
       .then((res) => {
         setPrenomina(normalizePrenominaData(res.data));
       })
@@ -1414,11 +1428,13 @@ function AsistenciasPage() {
                     vista === "prenomina"
                       ? getExcelPrenominaUrl(fechaInicio, fechaFin, {
                           userIds: prenominaEmpleadosSeleccionados,
+                          branchId,
                         })
                       : getExcelAsistenciasUrl({
                           startDate: fechaInicio,
                           endDate: fechaFin,
                           userIds: empleadosSeleccionados,
+                          branchId,
                         });           
                 }}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-success px-4 py-2 text-sm font-medium text-success-foreground hover:opacity-90 transition-opacity"
