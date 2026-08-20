@@ -340,12 +340,24 @@ function getFechaFromTimestamp(value: any) {
 }
 
 function getHoraFromTimestamp(value: any) {
-  const rawDate = String(value ?? "");
-  const hora = rawDate.includes("T")
-    ? rawDate.split("T")[1]?.slice(0, 5)
-    : rawDate.split(" ")[1]?.slice(0, 5);
+  const rawDate = String(value ?? "").trim();
+  const timePart = rawDate.includes("T")
+    ? rawDate.split("T")[1]
+    : rawDate.split(" ")[1];
 
-  return hora || "";
+  if (!timePart) return "";
+
+  const [hoursStr, minutesStr] = timePart.split(":");
+  let hours = parseInt(hoursStr, 10);
+  const minutes = minutesStr ? minutesStr.slice(0, 2) : "00";
+
+  if (isNaN(hours)) return "";
+
+  const period = hours >= 12 ? "p. m." : "a. m.";
+  hours = hours % 12 || 12;
+  const formattedHours = String(hours).padStart(2, "0");
+
+  return `${formattedHours}:${minutes} ${period}`;
 }
 
 function getEmpleadoCodigo(user: any) {
@@ -357,13 +369,21 @@ function getAsistenciaCodigo(record: any) {
 }
 
 function normalizeEstadoAsistencia(value: any) {
-  const estado = String(value ?? "").trim();
+  const estado = String(value ?? "").trim().toLowerCase();
 
-  if (!estado || estado === "check_in" || estado === "A tiempo") {
+  if (estado === "check_out" || estado === "salida") {
+    return "Salida";
+  }
+
+  if (estado === "check_in" || estado === "a tiempo" || estado === "entrada") {
+    return "Entrada"; 
+  }
+
+  if (!estado) {
     return "Asistió";
   }
 
-  return estado;
+  return String(value ?? "").trim();
 }
 
 function toDateInputValue(date: Date) {
@@ -1607,7 +1627,7 @@ function TablaAsistencias({
             <th className="text-left font-semibold px-5 py-3">Área</th>
             <th className="text-left font-semibold px-5 py-3">Empleado</th>
             <th className="text-left font-semibold px-5 py-3">Fecha</th>
-            <th className="text-left font-semibold px-5 py-3">Entrada</th>
+            <th className="text-left font-semibold px-5 py-3">Hora</th>
             <th className="text-left font-semibold px-5 py-3">Estado</th>
           </tr>
         </thead>

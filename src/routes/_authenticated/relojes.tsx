@@ -5,6 +5,7 @@ import { timecoreApi } from "@/lib/api/timecore";
 import {
   Plug,
   RefreshCw,
+  Clock,
   Wifi,
   WifiOff,
   Plus,
@@ -684,7 +685,7 @@ function RelojesPage() {
         const desfase = Math.abs(Number(clockStatus.drift_seconds ?? 0));
 
         window.alert(
-          `La sincronización fue bloqueada porque la fecha y hora del reloj están desfasadas por aproximadamente ${Math.max(
+          `La sincronización fue bloqueada porque la fecha y hora del reloj están desincronizadas por aproximadamente ${Math.max(
             1,
             Math.round(desfase / 60)
           )} minuto(s). Usa el botón "Ajustar hora" antes de sincronizar.`
@@ -1082,6 +1083,42 @@ function RelojesPage() {
                         {syncingId === r.id
                           ? "Sincronizando..."
                           : "Sincronizar"}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={
+                          syncingAll ||
+                          !r.activo ||
+                          r.estado !== "Conectado" ||
+                          syncingId === r.id ||
+                          syncingTimeId === r.id ||
+                          checkingTimeId === r.id
+                        }
+                        onClick={() => {
+                          if (r.activo && r.estado === "Conectado") {
+                            void ajustarHoraReloj(r.id);
+                          }
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                          r.activo && r.estado === "Conectado"
+                            ? "bg-success text-success-foreground hover:bg-success/90"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                        title={
+                          r.estado === "Conectado"
+                            ? "Sincronizar la fecha y hora con el servidor"
+                            : "El reloj debe estar conectado para ajustar la hora"
+                        }
+                      >
+                        <Clock
+                          className={`h-3.5 w-3.5 ${
+                            syncingTimeId === r.id ? "animate-spin" : ""
+                          }`}
+                        />
+                        {syncingTimeId === r.id
+                          ? "Ajustando hora..."
+                          : "Ajustar hora"}
                       </button>
 
                       <button
