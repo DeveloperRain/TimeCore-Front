@@ -67,7 +67,7 @@ export function AppSidebar({
   return (
     <aside
       className={`hidden md:flex md:flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-[width] duration-300 ease-in-out ${
-        collapsed ? "md:w-20" : "md:w-64"
+        collapsed ? "md:w-20" : "md:w-72"
       }`}
     >
       <div
@@ -94,8 +94,8 @@ export function AppSidebar({
             <p className="truncate text-lg font-bold tracking-[0.08em] text-white">
               TIMECORE
             </p>
-            <p className="mt-1 truncate text-xs font-medium text-white/75">
-              Control de asistencia
+            <p className="mt-1 text-xs font-medium text-white/75 leading-snug">
+              Sistema de Gestión Centralizado de Asistencias
             </p>
           </div>
         )}

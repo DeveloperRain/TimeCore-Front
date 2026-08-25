@@ -106,17 +106,23 @@ function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="h-10 w-10 rounded-md bg-primary flex items-center justify-center">
-            <img
-              src={timeCoreLogo}
-              alt="TimeCore"
-              className="h-9 w-9 object-contain"
-            />
-          </div>
+        <div className="flex flex-col items-center justify-center gap-2 mb-8">
+  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+    Sistema de Gestión Centralizada de Asistencias
+  </p>
 
-          <h1 className="text-2xl font-bold text-foreground">TimeCore</h1>
-        </div>
+  <div className="flex items-center justify-center gap-2">
+    <div className="h-10 w-10 rounded-md bg-primary flex items-center justify-center">
+      <img
+        src={timeCoreLogo}
+        alt="TimeCore"
+        className="h-9 w-9 object-contain"
+      />
+    </div>
+
+    <h1 className="text-2xl font-bold text-foreground">TimeCore</h1>
+  </div>
+</div>
 
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="flex gap-2 mb-6 p-1 rounded-md bg-muted">
